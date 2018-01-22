@@ -1,0 +1,26 @@
+{
+  "name": "fetchling",
+  "version": "1.0.0-alpha",
+  "description": "Fetch portions (jp2 tiles) from a large remote sensing jpeg2000 image",
+  "main": "dist/fetchling.js",
+  "scripts": {
+    "build": "rollup -c"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jvail/fetchling.git"
+  },
+  "keywords": [
+    "j2k",
+    "sentinel"
+  ],
+  "author": "jvail",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jvail/fetchling/issues"
+  },
+  "homepage": "https://github.com/jvail/fetchling#readme",
+  "devDependencies": {
+    "rollup-plugin-node-resolve": "^3.0.2"
+  }
+}
