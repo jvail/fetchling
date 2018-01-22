@@ -1,6 +1,6 @@
 # fetchling
 
-JS (still experimental) library to extract single tiles from a remote image source that supports HTTP range requests.
+JS (still experimental) library to extract single tiles from a remote jpeg2000 satellite image source that supports HTTP range requests.
 
 ## Requirements
 
