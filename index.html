@@ -143,6 +143,8 @@
 			try {
 				let ox = 399961, oy = 5600039;
 				let header = await fetchling.header(url);
+				let rx = Math.round((509760 - 399961) / header.siz.Xsiz);
+				let ry = Math.round((5600039 - 5490240) / header.siz.Ysiz);
 				let res = 100000 / header.siz.Xsiz;
 				let features = header.tiles.map(t => {
 					return {
@@ -153,11 +155,11 @@
 						geometry: {
 							type: 'Polygon',
 							coordinates: [[
-								[ t.tx0 * res + ox, oy - t.ty0 * res],
-								[ t.tx0 * res + ox + t.tw * res, oy - t.ty0 * res],
-								[ t.tx0 * res + ox + t.tw * res, oy - (t.ty0 * res + t.th * res)],
-								[ t.tx0 * res + ox, oy - (t.ty0 * res + t.th * res)],
-								[ t.tx0 * res + ox, oy - t.ty0 * res]
+								[ t.tx0 * rx + ox, oy - t.ty0 * ry],
+								[ t.tx0 * rx + ox + t.tw * rx, oy - t.ty0 * ry],
+								[ t.tx0 * rx + ox + t.tw * rx, oy - (t.ty0 * ry + t.th * ry)],
+								[ t.tx0 * rx + ox, oy - (t.ty0 * ry + t.th * ry)],
+								[ t.tx0 * rx + ox, oy - t.ty0 * ry]
 							]]
 						}
 					};
@@ -266,16 +268,17 @@
 				ctx.canvas.width = t.tw;
 				ctx.canvas.height = t.th;
 				let imgURL = getURL(data.i16, siz.Ssiz, siz.Csiz, t.tx0, t.ty0, t.tw, t.th);
-				let res = 100000 / header.siz.Xsiz;
+				let rx = Math.round((509760 - 399961) / header.siz.Xsiz);
+				let ry = Math.round((5600039 - 5490240) / header.siz.Ysiz);
 				let lay = new ol.layer.Image({
 					source: new ol.source.ImageStatic({
 						url: imgURL,
 						projection: proj,
 						imageExtent: [
-							t.tx0 * res + 399961,
-							5600039 - (t.ty0 * res + t.th * res),
-							t.tx0 * res + 399961 + t.tw * res,
-							5600039 - t.ty0 * res
+							t.tx0 * rx + 399961,
+							5600039 - (t.ty0 * ry + t.th * ry),
+							t.tx0 * rx + 399961 + t.tw * rx,
+							5600039 - t.ty0 * ry
 						],
 						imageSize: [t.tw, t.th]
 					})
