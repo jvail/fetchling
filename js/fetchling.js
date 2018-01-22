@@ -504,7 +504,7 @@ async function getTiles(header, idxs_) {
 
 const j2k = (function () {
 	const queue = [];
-	const worker = new Worker('j2k-worker.js');
+	const worker = new Worker('js/j2k-worker.js');
 	let initialized = new Promise ((resolve, reject) => {
 		queue.push({ resolve, reject });
 	});
