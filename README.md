@@ -1,12 +1,16 @@
 # fetchling
 
-JS (still experimental) library to extract single tiles from a remote image source (e.g. AWS Sentinel data) that supports HTTP range requests.
+JS (still experimental) library to extract single tiles from a remote image source that supports HTTP range requests.
 
 ## Requirements
 
 * async/await
 * WebAssembly
 * Browser (no node.js build available)
+
+## Examples
+
+* https://jvail.github.io/fetchling/
 
 ## Dependencies
 
