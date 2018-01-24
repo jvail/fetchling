@@ -8,7 +8,8 @@ export default async (url) => {
 			});
 		return {
 			type: res.headers.get('Content-Type'),
-			length: res.headers.get('Content-Length') || res.headers.get('Content-Range')
+			length: (res.headers.get('Content-Length') ||
+				res.headers.get('Content-Range')) || Infinity
 		};
 	} catch (err) {
 		return Promise.reject(err);
