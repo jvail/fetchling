@@ -220,17 +220,17 @@ const concat = (bufs) => {
 }
 
 const checkHead = async (url) => {
-
 	try {
 		let res = await fetch(url, {
-    			method: 'GET',
-    			headers: {
-      				Range: `bytes=0-1`
-    			}
-  			});
+				method: 'GET',
+				headers: {
+					Range: `bytes=0-1`
+				}
+			});
 		return {
 			type: res.headers.get('Content-Type'),
-			length: res.headers.get('Content-Length') || res.headers.get('Content-Range')
+			length: (res.headers.get('Content-Length') ||
+				res.headers.get('Content-Range')) || Infinity
 		};
 	} catch (err) {
 		return Promise.reject(err);
@@ -297,13 +297,11 @@ async function getHeader(url) {
 
 	try {
 		let head = await checkHead(url);
-		// if (head.ranges !== true)
-		// 	return Promise.reject(new Error('no support for range requests'));
 		if (head.type !== 'image/jp2')
 			return Promise.reject(new Error('url not a jp2 image'));
-		imgLength = head.length ? head.length : Infinity;
+		imgLength = head.length;
 	} catch (err) {
-		// return Promise.reject(err);
+		return Promise.reject(err);
 	}
 
 	const getBox = (pos, buffer) => {
