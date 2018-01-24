@@ -296,8 +296,6 @@ async function getHeader(url) {
 
 	try {
 		let head = await checkHead(url);
-		if (head.ranges !== true)
-			return Promise.reject(new Error('no support for range requests'));
 		if (head.type !== 'image/jp2')
 			return Promise.reject(new Error('url not a jp2 image'));
 		imgLength = head.length;
