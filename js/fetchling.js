@@ -219,32 +219,22 @@ const concat = (bufs) => {
 	}, new Uint8Array()).buffer;
 }
 
-const checkHead = (url) => {
-	return new Promise((resolve, reject) => {
-		/* apparently fetch does not expose all response headers */
-		try {
-			let req = new XMLHttpRequest();
-			req.onload = () => {
-				if (req.status === 200) {
-					resolve({
-						status: req.status,
-						ranges: (req.getResponseHeader('Accept-Ranges') && req.getResponseHeader('Accept-Ranges').indexOf('bytes') >= 0),
-						type: req.getResponseHeader('Content-Type'),
-						length: +req.getResponseHeader('Content-Length')
-					});
-				} else {
-					reject(new Error(`Request failed (${req.status})`));
-				}
-			};
-			req.onerror = () => {
-				reject(new Error(`Request failed (${req.status})`));
-			};
-			req.open('HEAD', url);
-			req.send();
-		} catch (err) {
-			reject(err);
-		}
-	});
+const checkHead = async (url) => {
+
+	try {
+		let res = await fetch(url, {
+    			method: 'GET',
+    			headers: {
+      				Range: `bytes=0-1`
+    			}
+  			});
+		return {
+			type: res.headers.get('Content-Type'),
+			length: res.headers.get('Content-Length') || res.headers.get('Content-Range')
+		};
+	} catch (err) {
+		return Promise.reject(err);
+	}
 };
 
 function Buffer(data) {
@@ -307,13 +297,13 @@ async function getHeader(url) {
 
 	try {
 		let head = await checkHead(url);
-		if (head.ranges !== true)
-			return Promise.reject(new Error('no support for range requests'));
+		// if (head.ranges !== true)
+		// 	return Promise.reject(new Error('no support for range requests'));
 		if (head.type !== 'image/jp2')
 			return Promise.reject(new Error('url not a jp2 image'));
-		imgLength = head.length;
+		imgLength = head.length ? head.length : Infinity;
 	} catch (err) {
-		return Promise.reject(err);
+		// return Promise.reject(err);
 	}
 
 	const getBox = (pos, buffer) => {

@@ -55,19 +55,19 @@
 			<div>
 				<select id='image'>
 					<option value='B01.jp2'>Band 1</option>
-					<!-- <option value='B02.jp2'>Band 2</option>
+					<option value='B02.jp2'>Band 2</option>
 					<option value='B03.jp2'>Band 3</option>
 					<option value='B04.jp2'>Band 4</option>
-					<option value='B05.jp2'>Band 5</option> -->
+					<option value='B05.jp2'>Band 5</option>
 					<option value='B06.jp2'>Band 6</option>
-					<!-- <option value='B07.jp2'>Band 7</option>
+					<option value='B07.jp2'>Band 7</option>
 					<option value='B08.jp2'>Band 8</option>
 					<option value='B8A.jp2'>Band 8A</option>
 					<option value='B09.jp2'>Band 9</option>
 					<option value='B10.jp2'>Band 10</option>
 					<option value='B11.jp2'>Band 11</option>
 					<option value='B12.jp2'>Band 12</option>
-					<option value='TCI.jp2'>True Color</option> -->
+					<option value='TCI.jp2'>True Color</option>
 				</select>
 			</div>
 			<div>
@@ -94,8 +94,8 @@
 		let pro = document.getElementById('progress');
 		let cvs = document.getElementById('canvas');
 		let ctx = cvs.getContext('2d');
-		let path = 'https://jvail.github.io/io/data/sentinel/';
-		let url = 'https://jvail.github.io/io/data/sentinel/B01.jp2';
+		let path = 'https://sentinel-s2-l1c.s3.amazonaws.com/tiles/32/U/MA/2017/4/30/0/';
+		let url = 'https://sentinel-s2-l1c.s3.amazonaws.com/tiles/32/U/MA/2017/4/30/0/B01.jp2';
 
 		let map = new ol.Map({
 			layers: [
@@ -190,7 +190,7 @@
 				map.addLayer(gridLayer);
 
 				let nodes = document.querySelectorAll('#header > div');
-				nodes[0].innerHTML = 'Size: ' + (header.imgLength / (Math.pow(1024, 2))).toFixed(1) + ' MB';
+				nodes[0].innerHTML = 'Size: ' + (header.imgLength  === Infinity ? 'Unknown' : (header.imgLength / Math.pow(1024, 2)).toFixed(1)) + ' MB';
 				nodes[1].innerHTML = 'Tiles: ' + (header.siz.nXTiles * header.siz.nYTiles);
 				nodes[2].innerHTML = 'Width: ' + (header.siz.Xsiz) + 'px';
 				nodes[3].innerHTML = 'Height: ' + (header.siz.Ysiz) + 'px';
