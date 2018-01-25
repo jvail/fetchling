@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Extract single tiles from a large jpeg2000 Sentinel image</title>
+		<link rel='stylesheet' href='https://openlayers.org/en/v4.6.4/css/ol.css' type='text/css'>
+		<script src='https://openlayers.org/en/v4.6.4/build/ol.js'></script>
+		<script src='https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.4.4/proj4.js'></script>
+		<script type='text/javascript' src='js/fetchling.js'></script>
+		<script type='text/javascript' src='js/tinycolor.js'></script>
+		<script type='text/javascript' src='js/tinygradient.js'></script>
+		<style type='text/css'>
+			body {
+				margin: 0px;
+				font-family: monospace;
+				overflow: hidden;
+			}
+			#menu {
+				width: 400px;
+				height: 100%;
+				position: absolute;
+				top: 0px;
+				right: 0px;
+				background: rgba(255,255,255,0.3);
+				border-left-width: 1px;
+				border-left-style: solid;
+				border-left-color: darkgrey;
+				padding-left: 20px;
+				padding-right: 20px;
+			}
+			#progress, #header {
+				margin-top: 10px;
+			}
+			#progress > *, #header > *,  #menu > * {
+				margin-top: 10px;
+				margin-bottom: 10px;
+			}
+			#header > * {
+				word-wrap: break-word;
+			}
+			.ol-dragbox {
+				background-color: rgba(255,255,255,0.1);
+				border-color: rgba(100,100,100,1);
+			}
+		</style>
+	</head>
+	<body>
+		<div id='map' class='map'></div>
+		<div id='menu'>
+			<div>
+				<h3>Extract single tiles from a large jpeg2000 Sentinel image.</h3>
+				<p>Click or shift+drag to select grid cells and download the tiles of a 100x100 km image.</p>
+				<p>Be <b>carefull</b> to not select too many tiles since this will trigger many parallel HTTP requests.</p>
+				<p>It seems due to canvas.toDataURL the displayed images lack some of the original quality.</p>
+			</div>
+			<div>
+				<select id='image'>
+					<option value='B01.jp2'>Band 1</option>
+					<option value='B02.jp2'>Band 2</option>
+					<option value='B03.jp2'>Band 3</option>
+					<option value='B04.jp2'>Band 4</option>
+					<option value='B05.jp2'>Band 5</option>
+					<option value='B06.jp2'>Band 6</option>
+					<option value='B07.jp2'>Band 7</option>
+					<option value='B08.jp2'>Band 8</option>
+					<option value='B8A.jp2'>Band 8A</option>
+					<option value='B09.jp2'>Band 9</option>
+					<option value='B10.jp2'>Band 10</option>
+					<option value='B11.jp2'>Band 11</option>
+					<option value='B12.jp2'>Band 12</option>
+					<option value='TCI.jp2'>True Color</option>
+				</select>
+			</div>
+			<div>
+				<input id='color' name='color' type='checkbox'><label for='color'>Colorize Grayscale</label>
+			</div>
+			<div id='header'><b>Image</b>
+				<div></div>
+				<div></div>
+				<div></div>
+				<div></div>
+				<div></div>
+			</div><b>Progress</b>
+			<div id='progress'></div>
+		</div>
+		<canvas id='canvas' style='display: none;'></canvas>
+	<script>
+
+		proj4.defs('EPSG:32632', '+proj=utm +zone=32 +ellps=WGS84 +datum=WGS84 +units=m +no_defs');
+		let proj = ol.proj.get('EPSG:32632');
+		proj.setExtent([166021.4431, 0.0000, 833978.5569, 9329005.1825]);
+
+		let gridLayer;
+		let imgLayers = [];
+		let pro = document.getElementById('progress');
+		let cvs = document.getElementById('canvas');
+		let ctx = cvs.getContext('2d');
+		let path = 'https://sentinel-s2-l1c.s3.amazonaws.com/tiles/32/U/MA/2017/4/30/0/';
+		let url = 'https://sentinel-s2-l1c.s3.amazonaws.com/tiles/32/U/MA/2017/4/30/0/B01.jp2';
+
+		let map = new ol.Map({
+			layers: [
+				new ol.layer.Tile({
+					source: new ol.source.OSM({
+						url: 'https://cartodb-basemaps-{a-d}.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png'
+					})
+				})
+			],
+			target: 'map',
+			view: new ol.View({
+				projection: proj,
+				center: [(399960 + 509760) / 2, (5600040 + 5490240) / 2],
+				zoom: 8,
+				extent: proj.getExtent()
+			})
+		});
+
+		map.on('singleclick', function (evt) {
+			map.forEachFeatureAtPixel(evt.pixel, function (feature, layer) {
+				fetchTile(feature.get('idx'));
+			});
+		});
+
+		let dragBox = new ol.interaction.DragBox({
+			condition: ol.events.condition.shiftKeyOnly
+		});
+
+		map.addInteraction(dragBox);
+		dragBox.on('boxend', function (evt) {
+			gridLayer.getSource().forEachFeatureInExtent(dragBox.getGeometry().getExtent(), function (feature) {
+				fetchTile(feature.get('idx'));
+			});
+		})
+
+
+		document.getElementById('image').onchange = (evt) => {
+			imgLayers.forEach(l => map.removeLayer(l));
+			url = path + evt.target.value;
+			makeGrid();
+		}
+
+		async function makeGrid() {
+
+			try {
+				let ox = 399961, oy = 5600039;
+				let header = await fetchling.header(url);
+				let rx = Math.round((509760 - 399961) / header.siz.Xsiz);
+				let ry = Math.round((5600039 - 5490240) / header.siz.Ysiz);
+				let res = 100000 / header.siz.Xsiz;
+				let features = header.tiles.map(t => {
+					return {
+						type: 'Feature',
+						properties: {
+							idx: t.idx
+						},
+						geometry: {
+							type: 'Polygon',
+							coordinates: [[
+								[ t.tx0 * rx + ox, oy - t.ty0 * ry],
+								[ t.tx0 * rx + ox + t.tw * rx, oy - t.ty0 * ry],
+								[ t.tx0 * rx + ox + t.tw * rx, oy - (t.ty0 * ry + t.th * ry)],
+								[ t.tx0 * rx + ox, oy - (t.ty0 * ry + t.th * ry)],
+								[ t.tx0 * rx + ox, oy - t.ty0 * ry]
+							]]
+						}
+					};
+				});
+
+				map.removeLayer(gridLayer);
+				gridLayer = new ol.layer.Vector({
+					source: new ol.source.Vector({
+						features: new ol.format.GeoJSON().readFeatures({
+							type: 'FeatureCollection',
+							'crs': {
+								'type': 'name',
+								'properties': {
+									'name': 'EPSG:23032'
+								}
+							},
+							'features': features
+						})
+					}),
+					style: new ol.style.Style({
+						stroke: new ol.style.Stroke({
+							color: 'grey',
+							width: 1
+						})
+					})
+				});
+
+				map.addLayer(gridLayer);
+
+				let nodes = document.querySelectorAll('#header > div');
+				nodes[0].innerHTML = 'Size: ' + (header.imgLength  === Infinity ? 'Unknown' : (header.imgLength / Math.pow(1024, 2)).toFixed(1)) + ' MB';
+				nodes[1].innerHTML = 'Tiles: ' + (header.siz.nXTiles * header.siz.nYTiles);
+				nodes[2].innerHTML = 'Width: ' + (header.siz.Xsiz) + 'px';
+				nodes[3].innerHTML = 'Height: ' + (header.siz.Ysiz) + 'px';
+				nodes[4].innerHTML = 'URL: ' + url;
+
+			} catch (err) {
+				console.log(err);
+			}
+
+		}
+
+
+		function getURL(i16, Ssiz, Csiz, x, y, w, h) {
+
+			let img = ctx.createImageData(w, h);
+
+			if (document.getElementById('color').checked && Csiz === 1) {
+				let max = -Infinity;
+				let min = Infinity;
+				let gradient = tinygradient('red', 'orange', 'green', 'blue');
+				let colors = gradient.rgb(50);
+				i16.forEach(v => {
+					max = max > v ? max : v;
+					min = min < v ? min : v;
+				});
+				// i16 = i16.map(v =>  32768 * (v - min) / (max - min));
+				for (let i = 0, ii = i16.length; i < ii; i++) {
+					let n = (49 * ((i16[i] - min) / (max - min))) | 0;
+					img.data[i*4] = colors[n]._r;
+					img.data[i*4+1] = colors[n]._g;
+					img.data[i*4+2] = colors[n]._b;
+					img.data[i*4+3] = 255;
+				}
+
+			} else {
+				let s = Ssiz <= 8 ? 0 : Ssiz - 8;
+				if (Csiz === 3) {
+					for (let i = 0, j = 0; i < i16.length; i+=3) {
+						img.data[j] = i16[i] >> s;
+						img.data[j+1] = i16[i+1] >> s;
+						img.data[j+2] = i16[i+2] >> s;
+						img.data[j+3] = 255;
+						j+=4;
+					}
+				} else {
+					for (let i = 0; i < i16.length; i++) {
+						img.data[i*4] = i16[i] >> s;
+						img.data[i*4+1] = i16[i] >> s;
+						img.data[i*4+2] = i16[i] >> s;
+						img.data[i*4+3] = 255;
+					}
+				}
+			}
+
+			ctx.putImageData(img, 0, 0);
+			return cvs.toDataURL('image/png');
+
+		}
+
+		async function fetchTile(idx) {
+
+			ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+			let div = document.createElement('div');
+			div.id = 'pro-' + idx;
+			div.appendChild(document.createTextNode('fetching tile index ' + idx + ' ...'));
+			pro.appendChild(div);
+
+			try {
+				let header = await fetchling.header(url);
+				let siz = header.siz;
+				let tiles = await fetchling.tiles(header, [idx]);
+				let data = await fetchling.decode(tiles[0]);
+				let t = header.tiles[idx];
+				ctx.canvas.width = t.tw;
+				ctx.canvas.height = t.th;
+				let imgURL = getURL(data.i16, siz.Ssiz, siz.Csiz, t.tx0, t.ty0, t.tw, t.th);
+				let rx = Math.round((509760 - 399961) / header.siz.Xsiz);
+				let ry = Math.round((5600039 - 5490240) / header.siz.Ysiz);
+				let lay = new ol.layer.Image({
+					source: new ol.source.ImageStatic({
+						url: imgURL,
+						projection: proj,
+						imageExtent: [
+							t.tx0 * rx + 399961,
+							5600039 - (t.ty0 * ry + t.th * ry),
+							t.tx0 * rx + 399961 + t.tw * rx,
+							5600039 - t.ty0 * ry
+						],
+						imageSize: [t.tw, t.th]
+					})
+				});
+				imgLayers.push(lay)
+				map.addLayer(lay);
+			} catch (err) {
+				console.log(err);
+			}
+
+			pro.removeChild(div);
+
+		}
+
+		makeGrid();
+
+		</script>
+	</body>
+</html>
