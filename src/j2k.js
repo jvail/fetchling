@@ -1,6 +1,7 @@
+import getPath from './path.js';
 export default (function () {
 	const queue = [];
-	const worker = new Worker('j2k-worker.js');
+	const worker = new Worker(getPath('j2k-worker.js'));
 	let initialized = new Promise ((resolve, reject) => {
 		queue.push({ resolve, reject });
 	});

@@ -490,9 +490,11 @@ async function getTiles(header, idxs_) {
 
 }
 
+const getPath = (name) => document ? `${document.currentScript.src.split('/').slice(0, -1).join('/')}/${name}` : name;
+
 const j2k = (function () {
 	const queue = [];
-	const worker = new Worker('j2k-worker.js');
+	const worker = new Worker(getPath('j2k-worker.js'));
 	let initialized = new Promise ((resolve, reject) => {
 		queue.push({ resolve, reject });
 	});
