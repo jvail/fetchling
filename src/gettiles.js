@@ -1,6 +1,7 @@
 import Buffer from './buffer.js'
 import fetchBytes from './fetchbytes.js';
 import concat from './concat.js'
+import find from './find.js'
 
 /* TODO: cache tile byte pos in header.tiles */
 
@@ -22,6 +23,9 @@ export default async function getTiles(header, idxs_) {
 
 				let idx = buffer.ui16(4);
 				let len = buffer.ui32(6) === 0 ? imgLength - pos - 2 : buffer.ui32(6);
+
+				header.tiles[idx].offset = pos;
+				header.tiles[idx].size = len;
 
 				if (idx === idxs[0]) {
 					let tile = await fetchBytes(url, pos, pos + len - 1);
@@ -47,6 +51,11 @@ export default async function getTiles(header, idxs_) {
 
 	};
 
-	return get(header.posSOT, []);
+	try {
+		let pos = await find(header, idxs[0]);
+		return get(pos, []);
+	} catch (err) {
+		Promise.reject(err);
+	}
 
 }

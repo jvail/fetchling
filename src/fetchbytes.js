@@ -7,12 +7,11 @@ export default async (url, srt, end) => {
 					Range: `bytes=${srt}-${end}`
 				}
 			});
-		if (res.ok) {
-			return res.arrayBuffer();
-		} else {
-			Promise.reject(new Error(`Request failed (${res.status})`));
-		}
+		if (res.status === 206 /* partial */) return res.arrayBuffer();
+		if (res.status === 416 /* exceeds length */) return new ArrayBuffer(0);
+		Promise.reject(new Error(`Request failed (${res.status})`));
 	} catch (err) {
+		if (res.status === 416) return new ArrayBuffer(0);
 		Promise.reject(err);
 	}
 };

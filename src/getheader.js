@@ -5,12 +5,17 @@ import concat from './concat.js'
 import checkHead from './checkhead.js'
 import Buffer from './buffer.js'
 import dims from './tiledims.js'
+import Cache from './cache.js'
+
+const cache = new Cache();
 
 export default async function getHeader(url) {
 
 	const EXTRA_BYTES = 42; // enough for box & marker type & size & SIZ vars
 
-	let imgLength = 0;
+	let imgLength = 0, header;
+
+	if (header = cache.get(url)) return header;
 
 	try {
 		let head = await checkHead(url);
@@ -80,7 +85,7 @@ export default async function getHeader(url) {
 					buf: buffer.slice(pos, pos + size + 2)
 				});
 			} else if (marker.name === 'SOT') {
-				return { pos, header };
+				return { pos, size: buffer.ui32(pos + 6), header };
 			} else {
 				header.push({
 					name: marker.name,
@@ -128,13 +133,16 @@ export default async function getHeader(url) {
 			try {
 				let ret = await getCodestreamHeader(pos + 8 + (box.xlen ? 8 : 0), buffer, []);
 				let noTiles = ret.header.siz.nXTiles * ret.header.siz.nYTiles;
+				let tiles = dims(Array.from(Array(noTiles).keys()), ret.header.siz);
+				tiles[0].offset = ret.pos;
+				tiles[0].size = ret.size;
 				return {
 					buf: concat(ret.header.map(h => h.buf)),
 					siz: ret.header.siz,
 					posSOT: ret.pos,
 					imgLength,
 					url,
-					tiles: dims(Array.from(Array(noTiles).keys()), ret.header.siz)
+					tiles
 				};
 			} catch (err) {
 				return Promise.reject(err);
@@ -154,6 +162,9 @@ export default async function getHeader(url) {
 
 	};
 
-	return parse(0, new Buffer([]));
+	header = await parse(0, new Buffer([]));
+	cache.add(header);
+
+	return header;
 
 };

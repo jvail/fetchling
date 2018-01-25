@@ -13,7 +13,8 @@ export default (idxs, siz) => {
 
 		return {
 			idx,
-			/*pos: 0, cache pos */
+			offset: 0,
+			size: 0,
 			tw: tx1 - tx0,
 			th: ty1 - ty0,
 			tx0,
