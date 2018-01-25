@@ -10,7 +10,7 @@ JS (still experimental) library to extract single tiles from a remote jpeg2000 s
 
 ## Examples
 
-* https://jvail.github.io/fetchling/
+* https://jvail.github.io/fetchling/examples
 
 ## Dependencies
 
