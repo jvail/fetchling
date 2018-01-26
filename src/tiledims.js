@@ -13,8 +13,8 @@ export default (idxs, siz) => {
 
 		return {
 			idx,
-			offset: 0,
-			size: 0,
+			off: 0,
+			len: 0,
 			tw: tx1 - tx0,
 			th: ty1 - ty0,
 			tx0,

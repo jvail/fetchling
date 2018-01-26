@@ -96,7 +96,7 @@ export default async function getHeader(url) {
 			if (pos + size >= buffer.length - EXTRA_BYTES) {
 				try {
 					let srt = buffer.length,
-						end = srt + Math.max(511, pos + size - srt + EXTRA_BYTES);
+						end = srt + Math.max(1023, pos + size - srt + EXTRA_BYTES);
 						if (end > imgLength) return Promise.reject(new Error('reached end of file'));
 					let buf = await fetchBytes(url, srt, end);
 					buffer = new Buffer(concat([buffer, buf]));
@@ -118,7 +118,7 @@ export default async function getHeader(url) {
 		if (pos >= buffer.length - EXTRA_BYTES) {
 			try {
 				let srt = buffer.length,
-					end = srt + Math.max(511, pos - srt + EXTRA_BYTES);
+					end = srt + Math.max(1023, pos - srt + EXTRA_BYTES);
 					if (end > imgLength) return Promise.reject(new Error('reached end of file'));
 					let buf = await fetchBytes(url, srt, end);
 				buffer = new Buffer(concat([buffer, buf]));
@@ -134,8 +134,8 @@ export default async function getHeader(url) {
 				let ret = await getCodestreamHeader(pos + 8 + (box.xlen ? 8 : 0), buffer, []);
 				let noTiles = ret.header.siz.nXTiles * ret.header.siz.nYTiles;
 				let tiles = dims(Array.from(Array(noTiles).keys()), ret.header.siz);
-				tiles[0].offset = ret.pos;
-				tiles[0].size = ret.size;
+				tiles[0].off = ret.pos;
+				tiles[0].len = ret.size;
 				return {
 					buf: concat(ret.header.map(h => h.buf)),
 					siz: ret.header.siz,

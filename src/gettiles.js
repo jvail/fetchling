@@ -24,8 +24,8 @@ export default async function getTiles(header, idxs_) {
 				let idx = buffer.ui16(4);
 				let len = buffer.ui32(6) === 0 ? imgLength - pos - 2 : buffer.ui32(6);
 
-				header.tiles[idx].offset = pos;
-				header.tiles[idx].size = len;
+				header.tiles[idx].off = pos;
+				header.tiles[idx].len = len;
 
 				if (idx === idxs[0]) {
 					let tile = await fetchBytes(url, pos, pos + len - 1);

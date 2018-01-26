@@ -277,8 +277,8 @@ const dims = (idxs, siz) => {
 
 		return {
 			idx,
-			offset: 0,
-			size: 0,
+			off: 0,
+			len: 0,
 			tw: tx1 - tx0,
 			th: ty1 - ty0,
 			tx0,
@@ -389,7 +389,7 @@ async function getHeader(url) {
 			if (pos + size >= buffer.length - EXTRA_BYTES) {
 				try {
 					let srt = buffer.length,
-						end = srt + Math.max(511, pos + size - srt + EXTRA_BYTES);
+						end = srt + Math.max(1023, pos + size - srt + EXTRA_BYTES);
 						if (end > imgLength) return Promise.reject(new Error('reached end of file'));
 					let buf = await fetchBytes(url, srt, end);
 					buffer = new Buffer(concat([buffer, buf]));
@@ -411,7 +411,7 @@ async function getHeader(url) {
 		if (pos >= buffer.length - EXTRA_BYTES) {
 			try {
 				let srt = buffer.length,
-					end = srt + Math.max(511, pos - srt + EXTRA_BYTES);
+					end = srt + Math.max(1023, pos - srt + EXTRA_BYTES);
 					if (end > imgLength) return Promise.reject(new Error('reached end of file'));
 					let buf = await fetchBytes(url, srt, end);
 				buffer = new Buffer(concat([buffer, buf]));
@@ -427,8 +427,8 @@ async function getHeader(url) {
 				let ret = await getCodestreamHeader(pos + 8 + (box.xlen ? 8 : 0), buffer, []);
 				let noTiles = ret.header.siz.nXTiles * ret.header.siz.nYTiles;
 				let tiles = dims(Array.from(Array(noTiles).keys()), ret.header.siz);
-				tiles[0].offset = ret.pos;
-				tiles[0].size = ret.size;
+				tiles[0].off = ret.pos;
+				tiles[0].len = ret.size;
 				return {
 					buf: concat(ret.header.map(h => h.buf)),
 					siz: ret.header.siz,
@@ -467,9 +467,10 @@ async function find (header, idx) {
 	const url = header.url,
 		imgLength = header.imgLength,
 		tiles = header.tiles,
-		BYTES = 1024 * 512;
+		BYTES = 1024 * 512,
+		idx_ = idx;
 
-	async function look(offset) {
+	async function _(offset) {
 
 		try {
 			if (offset < 0) return { pos: -1, idx: -1 };
@@ -481,15 +482,22 @@ async function find (header, idx) {
 					if (buffer.ui16(pos) === 0xff90) {
 						let idx = buffer.ui16(pos + 4);
 						let len = buffer.ui32(pos + 6);
+						// console.log('look for ' + idx_,'found ' + idx, len);
 						if (idx === tiles.length - 1) {
 							return { pos: pos + offset, idx };
 						} else if (idx < tiles.length - 1) {
-							let bytes = await fetchBytes(url, offset + pos + len, offset + pos + len + 2);
-							let buffer = new Buffer(bytes);
-							if (buffer.ui16(0) === 0xff90) {
-								header.tiles[idx].offset = pos + offset;
-								header.tiles[idx].size = len;
-								return { pos: pos + offset, idx };
+							// verify
+							if (header.tiles[idx + 1].off === offset + pos) {
+								header.tiles[idx].off = offset + pos;
+								header.tiles[idx].len = len;
+							} else {
+								let bytes = await fetchBytes(url, offset + pos + len, offset + pos + len + 2);
+								let buffer = new Buffer(bytes);
+								if (buffer.ui16(0) === 0xff90) {
+									header.tiles[idx].off = pos + offset;
+									header.tiles[idx].len = len;
+									return { pos: pos + offset, idx };
+								}
 							}
 						}
 					}
@@ -508,7 +516,7 @@ async function find (header, idx) {
 
 		try {
 
-			let sot, sots = await Promise.all([look(ahead), look(back)]);
+			let sot, sots = await Promise.all([_(ahead), _(back)]);
 			if (sot = sots.find(s => s.pos > 0 && s.idx <= idx)) {
 				return sot.pos;
 			} else {
@@ -521,27 +529,34 @@ async function find (header, idx) {
 
 	}
 
-	if (tiles[idx].offset > 0) {
-		return tiles[idx].offset;
-	} else if (idx > 0 && tiles[idx - 1].offset > 0) {
-		return tiles[idx - 1].offset + tiles[idx - 1].size;
+
+	if (tiles[idx_].off > 0) {
+		return tiles[idx_].off;
+	} else if (idx_ > 0 && tiles[idx_ - 1].off > 0) {
+		return tiles[idx_ - 1].off + tiles[idx_ - 1].len;
+	} else if (idx_ <= tiles.length / 8) {
+		return tiles[0].off;
 	} else {
-		let pre = tiles.slice(0, idx).reverse().find(t => t.offset > 0).idx;
-		if (idx - pre > tiles.length / 8) {
+
+		let pre = tiles.slice(0, idx_).reverse().find(t => t.off > 0).idx;
+		// let next = tiles.slice(idx_).find(t => t.off > 0);
+		// next = next ? next.idx : -1;
+		if (idx_ - pre > tiles.length / 8) {
 			let stat = tiles.reduce((o, t)=> {
-				o.s += t.size;
-				o.c += t.size ? 1 : 0;
+				o.s += t.len;
+				o.c += t.len ? 1 : 0;
 				return o;
 			}, { s: 0, c: 0 } );
 			let avg = stat.s / stat.c;
 			try {
-				return await seek(Math.round(avg * (idx - 0.5)) /*ahead*/, Math.round(avg * (idx - 0.5)) - BYTES);
+				return await seek(Math.round(avg * (idx_ - 0.5)) /*ahead*/, Math.round(avg * (idx_ - 0.5)) - BYTES);
 			} catch (err) {
 				Promise.reject(err);
 			}
 		} else {
-			return tiles[pre].offset;
+			return tiles[pre].off;
 		}
+
 	}
 
 }
@@ -567,8 +582,8 @@ async function getTiles(header, idxs_) {
 				let idx = buffer.ui16(4);
 				let len = buffer.ui32(6) === 0 ? imgLength - pos - 2 : buffer.ui32(6);
 
-				header.tiles[idx].offset = pos;
-				header.tiles[idx].size = len;
+				header.tiles[idx].off = pos;
+				header.tiles[idx].len = len;
 
 				if (idx === idxs[0]) {
 					let tile = await fetchBytes(url, pos, pos + len - 1);
