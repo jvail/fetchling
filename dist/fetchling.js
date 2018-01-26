@@ -221,15 +221,12 @@ const concat = (bufs) => {
 const checkHead = async (url) => {
 	try {
 		let res = await fetch(url, {
-				method: 'GET',
-				headers: {
-					Range: `bytes=0-1`
-				}
+				method: 'HEAD',
+				mode: 'cors'
 			});
 		return {
 			type: res.headers.get('Content-Type'),
-			length: (res.headers.get('Content-Length') ||
-				res.headers.get('Content-Range')) || Infinity
+			length: res.headers.get('Content-Length') || Infinity
 		};
 	} catch (err) {
 		return Promise.reject(err);
