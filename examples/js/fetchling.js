@@ -10,12 +10,11 @@ const fetchBytes = async (url, srt, end) => {
 					Range: `bytes=${srt}-${end}`
 				}
 			});
-		if (res.ok) {
-			return res.arrayBuffer();
-		} else {
-			Promise.reject(new Error(`Request failed (${res.status})`));
-		}
+		if (res.status === 206 /* partial */) return res.arrayBuffer();
+		if (res.status === 416 /* exceeds length */) return new ArrayBuffer(0);
+		Promise.reject(new Error(`Request failed (${res.status})`));
 	} catch (err) {
+		if (res.status === 416) return new ArrayBuffer(0);
 		Promise.reject(err);
 	}
 };
@@ -278,7 +277,8 @@ const dims = (idxs, siz) => {
 
 		return {
 			idx,
-			/*pos: 0, cache pos */
+			off: 0,
+			len: 0,
 			tw: tx1 - tx0,
 			th: ty1 - ty0,
 			tx0,
@@ -289,11 +289,26 @@ const dims = (idxs, siz) => {
 
 }
 
+function Cache () {
+
+	const d = [];
+
+	return {
+		add: (h) => d.push(h),
+		get: (url) => d.find(h => h.url === url)
+	};
+
+}
+
+const cache = new Cache();
+
 async function getHeader(url) {
 
 	const EXTRA_BYTES = 42; // enough for box & marker type & size & SIZ vars
 
-	let imgLength = 0;
+	let imgLength = 0, header;
+
+	if (header = cache.get(url)) return header;
 
 	try {
 		let head = await checkHead(url);
@@ -363,7 +378,7 @@ async function getHeader(url) {
 					buf: buffer.slice(pos, pos + size + 2)
 				});
 			} else if (marker.name === 'SOT') {
-				return { pos, header };
+				return { pos, size: buffer.ui32(pos + 6), header };
 			} else {
 				header.push({
 					name: marker.name,
@@ -374,7 +389,7 @@ async function getHeader(url) {
 			if (pos + size >= buffer.length - EXTRA_BYTES) {
 				try {
 					let srt = buffer.length,
-						end = srt + Math.max(511, pos + size - srt + EXTRA_BYTES);
+						end = srt + Math.max(1023, pos + size - srt + EXTRA_BYTES);
 						if (end > imgLength) return Promise.reject(new Error('reached end of file'));
 					let buf = await fetchBytes(url, srt, end);
 					buffer = new Buffer(concat([buffer, buf]));
@@ -396,7 +411,7 @@ async function getHeader(url) {
 		if (pos >= buffer.length - EXTRA_BYTES) {
 			try {
 				let srt = buffer.length,
-					end = srt + Math.max(511, pos - srt + EXTRA_BYTES);
+					end = srt + Math.max(1023, pos - srt + EXTRA_BYTES);
 					if (end > imgLength) return Promise.reject(new Error('reached end of file'));
 					let buf = await fetchBytes(url, srt, end);
 				buffer = new Buffer(concat([buffer, buf]));
@@ -411,13 +426,16 @@ async function getHeader(url) {
 			try {
 				let ret = await getCodestreamHeader(pos + 8 + (box.xlen ? 8 : 0), buffer, []);
 				let noTiles = ret.header.siz.nXTiles * ret.header.siz.nYTiles;
+				let tiles = dims(Array.from(Array(noTiles).keys()), ret.header.siz);
+				tiles[0].off = ret.pos;
+				tiles[0].len = ret.size;
 				return {
 					buf: concat(ret.header.map(h => h.buf)),
 					siz: ret.header.siz,
 					posSOT: ret.pos,
 					imgLength,
 					url,
-					tiles: dims(Array.from(Array(noTiles).keys()), ret.header.siz)
+					tiles
 				};
 			} catch (err) {
 				return Promise.reject(err);
@@ -437,7 +455,109 @@ async function getHeader(url) {
 
 	};
 
-	return parse(0, new Buffer([]));
+	header = await parse(0, new Buffer([]));
+	cache.add(header);
+
+	return header;
+
+}
+
+async function find (header, idx) {
+
+	const url = header.url,
+		imgLength = header.imgLength,
+		tiles = header.tiles,
+		BYTES = 1024 * 512,
+		idx_ = idx;
+
+	async function _(offset) {
+
+		try {
+			if (offset < 0) return { pos: -1, idx: -1 };
+			let bytes = await fetchBytes(url, offset, offset + BYTES - 1);
+			if (bytes.byteLength) {
+				let buffer = new Buffer(bytes);
+				let pos = 0;
+				while (pos < bytes.byteLength - 1) {
+					if (buffer.ui16(pos) === 0xff90) {
+						let idx = buffer.ui16(pos + 4);
+						let len = buffer.ui32(pos + 6);
+						// console.log('look for ' + idx_,'found ' + idx, len);
+						if (idx === tiles.length - 1) {
+							return { pos: pos + offset, idx };
+						} else if (idx < tiles.length - 1) {
+							// verify
+							if (header.tiles[idx + 1].off === offset + pos) {
+								header.tiles[idx].off = offset + pos;
+								header.tiles[idx].len = len;
+							} else {
+								let bytes = await fetchBytes(url, offset + pos + len, offset + pos + len + 2);
+								let buffer = new Buffer(bytes);
+								if (buffer.ui16(0) === 0xff90) {
+									header.tiles[idx].off = pos + offset;
+									header.tiles[idx].len = len;
+									return { pos: pos + offset, idx };
+								}
+							}
+						}
+					}
+					pos++;
+				}
+				return { pos: 0, idx: -1 };
+			}
+			return { pos: -1, idx: -1 };
+		} catch (err) {
+			Promise.reject(err);
+		}
+
+	}
+
+	async function seek(ahead, back) {
+
+		try {
+
+			let sot, sots = await Promise.all([_(ahead), _(back)]);
+			if (sot = sots.find(s => s.pos > 0 && s.idx <= idx)) {
+				return sot.pos;
+			} else {
+				return await seek(sots[0].idx > idx || sots[0].idx < 0 ? -1 : ahead + BYTES, back - BYTES);
+			}
+
+		} catch (err) {
+			Promise.reject(err);
+		}
+
+	}
+
+
+	if (tiles[idx_].off > 0) {
+		return tiles[idx_].off;
+	} else if (idx_ > 0 && tiles[idx_ - 1].off > 0) {
+		return tiles[idx_ - 1].off + tiles[idx_ - 1].len;
+	} else if (idx_ <= tiles.length / 8) {
+		return tiles[0].off;
+	} else {
+
+		let pre = tiles.slice(0, idx_).reverse().find(t => t.off > 0).idx;
+		// let next = tiles.slice(idx_).find(t => t.off > 0);
+		// next = next ? next.idx : -1;
+		if (idx_ - pre > tiles.length / 8) {
+			let stat = tiles.reduce((o, t)=> {
+				o.s += t.len;
+				o.c += t.len ? 1 : 0;
+				return o;
+			}, { s: 0, c: 0 } );
+			let avg = stat.s / stat.c;
+			try {
+				return await seek(Math.round(avg * (idx_ - 0.5)) /*ahead*/, Math.round(avg * (idx_ - 0.5)) - BYTES);
+			} catch (err) {
+				Promise.reject(err);
+			}
+		} else {
+			return tiles[pre].off;
+		}
+
+	}
 
 }
 
@@ -461,6 +581,9 @@ async function getTiles(header, idxs_) {
 
 				let idx = buffer.ui16(4);
 				let len = buffer.ui32(6) === 0 ? imgLength - pos - 2 : buffer.ui32(6);
+
+				header.tiles[idx].off = pos;
+				header.tiles[idx].len = len;
 
 				if (idx === idxs[0]) {
 					let tile = await fetchBytes(url, pos, pos + len - 1);
@@ -486,7 +609,12 @@ async function getTiles(header, idxs_) {
 
 	}
 
-	return get(header.posSOT, []);
+	try {
+		let pos = await find(header, idxs[0]);
+		return get(pos, []);
+	} catch (err) {
+		Promise.reject(err);
+	}
 
 }
 
