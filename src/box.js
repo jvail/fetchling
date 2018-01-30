@@ -140,7 +140,6 @@ export default async function (url) {
 				buf = box.buf;
 				switch (box.name) {
 					case 'lbl':
-						box.data = txt.decode(buf.data.slice(box.off + 8, box.off + box.len));
 					case 'xml':
 						box.data = txt.decode(buf.data.slice(box.off + 8, box.off + box.len));
 					break;

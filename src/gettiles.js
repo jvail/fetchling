@@ -8,7 +8,7 @@ import find from './find.js'
 export default async function getTiles(header, idxs_) {
 
 	const url = header.url,
-		imgLength = header.imgLength,
+		imgLen = header.imgLen,
 		head = header.buf,
 		idxs = idxs_.slice().sort();
 
@@ -22,7 +22,7 @@ export default async function getTiles(header, idxs_) {
 			if (buffer.ui16(0) === 0xff90 /* SOT */) {
 
 				let idx = buffer.ui16(4);
-				let len = buffer.ui32(6) === 0 ? imgLength - pos - 2 : buffer.ui32(6);
+				let len = buffer.ui32(6) === 0 ? imgLen - pos - 2 : buffer.ui32(6);
 
 				header.tiles[idx].off = pos;
 				header.tiles[idx].len = len;
@@ -37,7 +37,7 @@ export default async function getTiles(header, idxs_) {
 
 				if (!idxs.length) return tiles;
 
-				if (pos + len + 1 > imgLength) throw new Error('reached end of file');
+				if (pos + len + 1 > imgLen) throw new Error('reached end of file');
 
 				return await get(pos + len, tiles);
 

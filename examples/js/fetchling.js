@@ -206,7 +206,6 @@ async function getBoxes (url) {
 				buf = box.buf;
 				switch (box.name) {
 					case 'lbl':
-						box.data = txt.decode(buf.data.slice(box.off + 8, box.off + box.len));
 					case 'xml':
 						box.data = txt.decode(buf.data.slice(box.off + 8, box.off + box.len));
 					break;
@@ -314,15 +313,11 @@ const markers = Object.freeze({
 
 const checkHead = async (url) => {
 	try {
-		let res = await fetch(url, {
-				method: 'HEAD',
-				mode: 'cors',
-				cache: 'no-store'
-			});
-		return {
-			type: res.headers.get('Content-Type'),
-			length: res.headers.get('Content-Length') || Infinity
-		};
+		return (await fetch(url, {
+			method: 'HEAD',
+			mode: 'cors',
+			cache: 'no-store'
+		})).headers.get('Content-Length') || Infinity;
 	} catch (err) {
 		return Promise.reject(err);
 	}
@@ -396,13 +391,12 @@ async function getHeader(url) {
 
 	const EXTRA_BYTES = 42; // enough for box & marker type & size & SIZ vars
 
-	let imgLength = 0, header;
+	let imgLen = 0, header;
 
 	if (header = cache.get(url)) return header;
 
 	try {
-		let head = await checkHead(url);
-		imgLength = head.length;
+		imgLen = await checkHead(url);
 	} catch (err) {
 		return Promise.reject(err);
 	}
@@ -460,7 +454,7 @@ async function getHeader(url) {
 			try {
 				let srt = buffer.length,
 					end = srt + Math.max(1023, pos + size - srt + EXTRA_BYTES);
-					if (end > imgLength) throw new Error('reached end of file');
+					if (end > imgLen) throw new Error('reached end of file');
 				let buf = await fetchBytes(url, srt, end);
 				buffer = new Buffer(concat([buffer, buf]));
 			} catch (err) {
@@ -497,7 +491,7 @@ async function getHeader(url) {
 					Math.round((ext[2] - ext[0]) / head.siz.Xsiz),
 					Math.round((ext[3] - ext[1]) / head.siz.Ysiz)
 				],
-				len: imgLength,
+				imgLen: imgLen,
 				url,
 				tiles
 			};
@@ -517,7 +511,7 @@ async function getHeader(url) {
 async function find (header, idx) {
 
 	const url = header.url,
-		imgLength = header.imgLength,
+		imgLen = header.imgLen,
 		tiles = header.tiles,
 		BYTES = 1024 * 512,
 		idx_ = idx;
@@ -525,8 +519,8 @@ async function find (header, idx) {
 	async function _(offset) {
 
 		try {
-			if (offset < 0) return { pos: -1, idx: -1 };
-			let bytes = await fetchBytes(url, offset, offset + BYTES - 1);
+			if (offset < 0 || offset >= imgLen) return { pos: -1, idx: -1 };
+			let bytes = await fetchBytes(url, offset, Math.min(offset + BYTES - 1, imgLen));
 			if (bytes.byteLength) {
 				let buffer = new Buffer(bytes);
 				let pos = 0;
@@ -618,7 +612,7 @@ async function find (header, idx) {
 async function getTiles(header, idxs_) {
 
 	const url = header.url,
-		imgLength = header.imgLength,
+		imgLen = header.imgLen,
 		head = header.buf,
 		idxs = idxs_.slice().sort();
 
@@ -632,7 +626,7 @@ async function getTiles(header, idxs_) {
 			if (buffer.ui16(0) === 0xff90 /* SOT */) {
 
 				let idx = buffer.ui16(4);
-				let len = buffer.ui32(6) === 0 ? imgLength - pos - 2 : buffer.ui32(6);
+				let len = buffer.ui32(6) === 0 ? imgLen - pos - 2 : buffer.ui32(6);
 
 				header.tiles[idx].off = pos;
 				header.tiles[idx].len = len;
@@ -647,7 +641,7 @@ async function getTiles(header, idxs_) {
 
 				if (!idxs.length) return tiles;
 
-				if (pos + len + 1 > imgLength) throw new Error('reached end of file');
+				if (pos + len + 1 > imgLen) throw new Error('reached end of file');
 
 				return await get(pos + len, tiles);
 

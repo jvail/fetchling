@@ -4,7 +4,7 @@ import Buffer from './buffer.js';
 export default async function (header, idx) {
 
 	const url = header.url,
-		imgLength = header.imgLength,
+		imgLen = header.imgLen,
 		tiles = header.tiles,
 		BYTES = 1024 * 512,
 		idx_ = idx;
@@ -12,8 +12,8 @@ export default async function (header, idx) {
 	async function _(offset) {
 
 		try {
-			if (offset < 0) return { pos: -1, idx: -1 };
-			let bytes = await fetchBytes(url, offset, offset + BYTES - 1);
+			if (offset < 0 || offset >= imgLen) return { pos: -1, idx: -1 };
+			let bytes = await fetchBytes(url, offset, Math.min(offset + BYTES - 1, imgLen));
 			if (bytes.byteLength) {
 				let buffer = new Buffer(bytes);
 				let pos = 0;

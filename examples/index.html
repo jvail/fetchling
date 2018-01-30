@@ -190,7 +190,7 @@
 				map.addLayer(gridLayer);
 
 				let nodes = document.querySelectorAll('#header > div');
-				nodes[0].innerHTML = 'Size: ' + (header.len  === Infinity ? 'Unknown' : (header.len / Math.pow(1024, 2)).toFixed(1)) + ' MB';
+				nodes[0].innerHTML = 'Size: ' + (header.imgLen  === Infinity ? 'Unknown' : (header.imgLen / Math.pow(1024, 2)).toFixed(1)) + ' MB';
 				nodes[1].innerHTML = 'Tiles: ' + (header.tiles.length);
 				nodes[2].innerHTML = 'Width: ' + (header.w) + 'px';
 				nodes[3].innerHTML = 'Height: ' + (header.h) + 'px';

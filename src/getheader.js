@@ -14,13 +14,12 @@ export default async function getHeader(url) {
 
 	const EXTRA_BYTES = 42; // enough for box & marker type & size & SIZ vars
 
-	let imgLength = 0, header, KB = 1024;
+	let imgLen = 0, header, KB = 1024;
 
 	if (header = cache.get(url)) return header;
 
 	try {
-		let head = await checkHead(url);
-		imgLength = head.length;
+		imgLen = await checkHead(url);
 	} catch (err) {
 		return Promise.reject(err);
 	}
@@ -78,7 +77,7 @@ export default async function getHeader(url) {
 			try {
 				let srt = buffer.length,
 					end = srt + Math.max(1023, pos + size - srt + EXTRA_BYTES);
-					if (end > imgLength) throw new Error('reached end of file');
+					if (end > imgLen) throw new Error('reached end of file');
 				let buf = await fetchBytes(url, srt, end);
 				buffer = new Buffer(concat([buffer, buf]));
 			} catch (err) {
@@ -115,7 +114,7 @@ export default async function getHeader(url) {
 					Math.round((ext[2] - ext[0]) / head.siz.Xsiz),
 					Math.round((ext[3] - ext[1]) / head.siz.Ysiz)
 				],
-				len: imgLength,
+				imgLen: imgLen,
 				url,
 				tiles
 			};
