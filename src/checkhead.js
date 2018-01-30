@@ -2,7 +2,8 @@ export default async (url) => {
 	try {
 		let res = await fetch(url, {
 				method: 'HEAD',
-				mode: 'cors'
+				mode: 'cors',
+				cache: 'no-store'
 			});
 		return {
 			type: res.headers.get('Content-Type'),

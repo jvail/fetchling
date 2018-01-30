@@ -82,7 +82,6 @@
 			</div><b>Progress</b>
 			<div id='progress'></div>
 		</div>
-		<canvas id='canvas' style='display: none;'></canvas>
 	<script>
 
 		proj4.defs('EPSG:32632', '+proj=utm +zone=32 +ellps=WGS84 +datum=WGS84 +units=m +no_defs');
@@ -92,8 +91,6 @@
 		let gridLayer;
 		let imgLayers = [];
 		let pro = document.getElementById('progress');
-		let cvs = document.getElementById('canvas');
-		let ctx = cvs.getContext('2d');
 		let path = 'https://sentinel-s2-l1c.s3.amazonaws.com/tiles/32/U/MA/2017/4/30/0/';
 		let url = 'https://sentinel-s2-l1c.s3.amazonaws.com/tiles/32/U/MA/2017/4/30/0/B01.jp2';
 		let gradient = tinygradient('red', 'orange', 'green', 'blue');
@@ -145,11 +142,10 @@
 		async function makeGrid() {
 
 			try {
-				let ox = 399961, oy = 5600039;
 				let header = await fetchling.header(url);
-				let rx = Math.round((509760 - 399961) / header.siz.Xsiz);
-				let ry = Math.round((5600039 - 5490240) / header.siz.Ysiz);
-				let res = 100000 / header.siz.Xsiz;
+				let ox = header.ext[0], oy = header.ext[3];
+				let rx = header.res[0];
+				let ry = header.res[1];
 				let features = header.tiles.map(t => {
 					return {
 						type: 'Feature',
@@ -194,10 +190,10 @@
 				map.addLayer(gridLayer);
 
 				let nodes = document.querySelectorAll('#header > div');
-				nodes[0].innerHTML = 'Size: ' + (header.imgLength  === Infinity ? 'Unknown' : (header.imgLength / Math.pow(1024, 2)).toFixed(1)) + ' MB';
-				nodes[1].innerHTML = 'Tiles: ' + (header.siz.nXTiles * header.siz.nYTiles);
-				nodes[2].innerHTML = 'Width: ' + (header.siz.Xsiz) + 'px';
-				nodes[3].innerHTML = 'Height: ' + (header.siz.Ysiz) + 'px';
+				nodes[0].innerHTML = 'Size: ' + (header.len  === Infinity ? 'Unknown' : (header.len / Math.pow(1024, 2)).toFixed(1)) + ' MB';
+				nodes[1].innerHTML = 'Tiles: ' + (header.tiles.length);
+				nodes[2].innerHTML = 'Width: ' + (header.w) + 'px';
+				nodes[3].innerHTML = 'Height: ' + (header.h) + 'px';
 				nodes[4].innerHTML = 'URL: ' + url;
 
 			} catch (err) {
@@ -207,8 +203,11 @@
 		}
 
 
-		function getURL(i16, Ssiz, Csiz, x, y, w, h) {
+		function getURL(cvs, i16, Ssiz, Csiz, x, y, w, h) {
 
+			let ctx = cvs.getContext('2d');
+			ctx.canvas.width = w;
+			ctx.canvas.height = h;
 			let img = ctx.createImageData(w, h);
 
 			if (document.getElementById('color').checked && Csiz === 1) {
@@ -254,48 +253,48 @@
 
 		async function fetchTiles(idxs) {
 
-			idxs.forEach(idx => {
-				let div = document.createElement('div');
-				div.id = 'pro-' + idx;
-				div.appendChild(document.createTextNode('fetching tile index ' + idx + ' ...'));
-				pro.appendChild(div);
+			let cvs = document.createElement('canvas');
+			cvs.style.display = 'none';
+
+			idxs = idxs.filter(idx => {
+				if (document.getElementById('pro-' + idx)) {
+					return false;
+				} else {
+					let div = document.createElement('div');
+					div.id = 'pro-' + idx;
+					div.appendChild(document.createTextNode('fetching tile index ' + idx + ' ...'));
+					pro.appendChild(div);
+					return true;
+				}
 			});
 
 			try {
 				let header = await fetchling.header(url);
-				let siz = header.siz;
 				for (idx of idxs) {
-					ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-					let tiles = await fetchling.tiles(header, [idx]);
-					let data = await fetchling.decode(tiles[0]);
-					let t = header.tiles[idx];
-					ctx.canvas.width = t.tw;
-					ctx.canvas.height = t.th;
-					let imgURL = getURL(data.i16, siz.Ssiz, siz.Csiz, t.tx0, t.ty0, t.tw, t.th);
-					let rx = Math.round((509760 - 399961) / header.siz.Xsiz);
-					let ry = Math.round((5600039 - 5490240) / header.siz.Ysiz);
-					let lay = new ol.layer.Image({
-						source: new ol.source.ImageStatic({
-							url: imgURL,
-							projection: proj,
-							imageExtent: [
-								t.tx0 * rx + 399961,
-								5600039 - (t.ty0 * ry + t.th * ry),
-								t.tx0 * rx + 399961 + t.tw * rx,
-								5600039 - t.ty0 * ry
-							],
-							imageSize: [t.tw, t.th]
-						})
-					});
-					imgLayers.push(lay)
-					map.addLayer(lay);
-					pro.removeChild(document.getElementById('pro-' + idx));
+					await (async function (idx) {
+						let tiles = await fetchling.tiles(header, [idx]);
+						let data = await fetchling.decode(tiles[0]);
+						let t = header.tiles[idx];
+						let imgURL = getURL(cvs, data.i16, header.bit, header.cmp, t.tx0, t.ty0, t.tw, t.th);
+						let lay = new ol.layer.Image({
+							source: new ol.source.ImageStatic({
+								url: imgURL,
+								projection: proj,
+								imageExtent: t.ext,
+								imageSize: [t.tw, t.th]
+							})
+						});
+						imgLayers.push(lay)
+						map.addLayer(lay);
+						pro.removeChild(document.getElementById('pro-' + t.idx));
+					}(idx));
 				}
 			} catch (err) {
 				console.log(err);
 			}
 
 		}
+
 
 		makeGrid();
 

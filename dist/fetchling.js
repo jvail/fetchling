@@ -19,96 +19,211 @@ const fetchBytes = async (url, srt, end) => {
 	}
 };
 
+function Buffer(data) {
+	const d = (data instanceof ArrayBuffer || Array.isArray(data)) ? new Uint8Array(data) : data;
+	return Object.freeze({
+		ui8: i => d[i],
+		ui16: i => (d[i] << 8) + d[i+1],
+		ui32: i => (d[i] << 24) + (d[i+1] << 16) + (d[i+2] << 8) + d[i+3],
+		setUi8: (i, v) => {
+			d[i] = v;
+		},
+		setUi16: (i, v) => {
+			d[i] = v >> 8;
+			d[i+1] = v;
+		},
+		setUi32: (i, v) => {
+			d[i] = v >> 24;
+			d[i+1] = v >> 16;
+			d[i+2] = v >> 8;
+			d[i+3] = v;
+		},
+		array: d,
+		arrayBuffer: d.buffer,
+		length: d.byteLength,
+		len: d.byteLength,
+		data: d.buffer,
+		slice: (...args) => new Buffer(d.buffer.slice(...args))
+	});
+}
+
+const concat = (bufs) => {
+	return bufs.reduce((a, b) => {
+		let alen = a.byteLength, blen = 0;
+		if (Array.isArray(b)) {
+			blen = b.length;
+		} else {
+			if (b.array instanceof Uint8Array) {
+				b = b.array;
+				blen = b.byteLength;
+			} else if (b instanceof ArrayBuffer) {
+				b = new Uint8Array(b);
+				blen = b.byteLength;
+			}
+		}
+		let c = new Uint8Array(alen + blen);
+		c.set(a, 0);
+		c.set(b, alen);
+		return c;
+	}, new Uint8Array()).buffer;
+}
+
 const boxes = Object.freeze({
-	'6a502020': {
-		name: 'signature',
+	0x6a502020: {
+		name: 'jP',
 		sbox: false
 	},
-	'66747970': {
-		name: 'fileType',
+	0x66747970: {
+		name: 'ftyp',
 		sbox: false
 	},
-	'6a703268': {
-		name: 'jp2Header',
+	0x6a703268: {
+		name: 'jp2h',
 		sbox: true
 	},
-	'69686472': {
-		name: 'imageHeader',
+	0x69686472: {
+		name: 'ihdr',
 		sbox: false
 	},
-	'62706363': {
-		name: 'bitsPerComponent',
+	0x62706363: {
+		name: 'bpcc',
 		sbox: false
 	},
-	'6a703269': {
-		name: 'intellectualProperty',
+	0x6a703269: {
+		name: 'jp2i',
 		sbox: false
 	},
-	'786d6c20': {
+	0x786d6c20: {
 		name: 'xml',
 		sbox: false
 	},
-	'75756964': {
+	0x75756964: {
 		name: 'uuid',
 		sbox: false
 	},
-	'75696e66': {
-		name: 'uuidInfo',
+	0x75696e66: {
+		name: 'uinf',
 		sbox: true
 	},
-	'636f6c72': {
-		name: 'colourSpecification',
+	0x636f6c72: {
+		name: 'colr',
 		sbox: false
 	},
-	'70636c72': {
-		name: 'palette',
+	0x70636c72: {
+		name: 'pclr',
 		sbox: false
 	},
-	'636d6170': {
-		name: 'componentMapping',
+	0x636d6170: {
+		name: 'cmap',
 		sbox: false
 	},
-	'63646566': {
-		name: 'channelDefinition',
+	0x63646566: {
+		name: 'cdef',
 		sbox: false
 	},
-	'72657320': {
-		name: 'resolution',
+	0x72657320: {
+		name: 'res',
 		sbox: true
 	},
-	'6a703263': {
-		name: 'contiguousCodestream',
+	0x6a703263: {
+		name: 'jp2c',
 		sbox: false
 	},
-	'6a706368': {
-		name: 'codestreamHeader',
+	0x6a706368: {
+		name: 'jpch',
 		sbox: true
 	},
-	'72657363': {
-		name: 'captureResolution',
+	0x72657363: {
+		name: 'resc',
 		sbox: false
 	},
-	'72657364': {
-		name: 'displayResolution',
+	0x72657364: {
+		name: 'resd',
 		sbox: false
 	},
-	'756c7374': {
-		name: 'uuidList',
+	0x756c7374: {
+		name: 'ulst',
 		sbox: false
 	},
-	'75726c20': {
+	0x75726c20: {
 		name: 'url',
 		sbox: false
 	},
-	'61736f63': {
-		name: 'association',
+	0x61736f63: {
+		name: 'asoc',
 		sbox: true
 	},
-	'6c626c20': {
-		name: 'label',
+	0x6c626c20: {
+		name: 'lbl',
 		sbox: false
 	}
 });
+
+async function* getBox(url, buf) {
+
+	let off = 0;
+
+	while (1) {
+
+		let box = boxes[buf.ui32(off + 4)],
+			off_ = off,
+			len = buf.ui32(off),
+			xlen = len === 1 ? buf.ui32(off + 8) * 4294967296 + buf.ui32(off + 12) : 0;
+
+		if (!box) {
+			throw new Error('no jp2 box found');
+		}
+
+		off = box.sbox ? (off + 8 + (xlen ? 8 : 0)) : (off + len);
+		if (off + 16 < buf.len && box.name !== 'jp2c') {
+			let byt = await fetchBytes(url, buf.len, buf.len + Math.max(1024, off + 16));
+			buf = new Buffer(concat([buf, byt]));
+		}
+		yield {
+			name: box.name,
+			sbox: box.sbox,
+			len: xlen ? xlen : len,
+			xlen,
+			off: off_,
+			buf
+		};
+		if (box.name === 'jp2c') return;
+	}
+
+}
+
+async function getBoxes (url) {
+
+	try {
+
+		let boxs = [];
+		let byt = await fetchBytes(url, 0, 2048);
+		let buf = new Buffer(byt);
+		let txt = new TextDecoder();
+
+		if (buf.ui32(4) === 0x6a502020) {
+			for await (const box of getBox(url, buf)) {
+				buf = box.buf;
+				switch (box.name) {
+					case 'lbl':
+						box.data = txt.decode(buf.data.slice(box.off + 8, box.off + box.len));
+					case 'xml':
+						box.data = txt.decode(buf.data.slice(box.off + 8, box.off + box.len));
+					break;
+				}
+				boxs.push(box);
+			}
+		} else {
+			throw new Error('not a j2k file');
+		}
+
+		return boxs;
+
+	} catch (err) {
+		Promise.reject(err);
+	}
+
+}
 
 const markers = Object.freeze({
 	'ff4f': {
@@ -197,32 +312,12 @@ const markers = Object.freeze({
 	}
 });
 
-const concat = (bufs) => {
-	return bufs.reduce((a, b) => {
-		let alen = a.byteLength, blen = 0;
-		if (Array.isArray(b)) {
-			blen = b.length;
-		} else {
-			if (b.array instanceof Uint8Array) {
-				b = b.array;
-				blen = b.byteLength;
-			} else if (b instanceof ArrayBuffer) {
-				b = new Uint8Array(b);
-				blen = b.byteLength;
-			}
-		}
-		let c = new Uint8Array(alen + blen);
-		c.set(a, 0);
-		c.set(b, alen);
-		return c;
-	}, new Uint8Array()).buffer;
-}
-
 const checkHead = async (url) => {
 	try {
 		let res = await fetch(url, {
 				method: 'HEAD',
-				mode: 'cors'
+				mode: 'cors',
+				cache: 'no-store'
 			});
 		return {
 			type: res.headers.get('Content-Type'),
@@ -233,35 +328,9 @@ const checkHead = async (url) => {
 	}
 };
 
-function Buffer(data) {
-	const d = (data instanceof ArrayBuffer || Array.isArray(data)) ? new Uint8Array(data) : data;
-	return Object.freeze({
-		ui8: i => d[i],
-		ui16: i => (d[i] << 8) + d[i+1],
-		ui32: i => (d[i] << 24) + (d[i+1] << 16) + (d[i+2] << 8) + d[i+3],
-		setUi8: (i, v) => {
-			d[i] = v;
-		},
-		setUi16: (i, v) => {
-			d[i] = v >> 8;
-			d[i+1] = v;
-		},
-		setUi32: (i, v) => {
-			d[i] = v >> 24;
-			d[i+1] = v >> 16;
-			d[i+2] = v >> 8;
-			d[i+3] = v;
-		},
-		array: d,
-		arrayBuffer: d.buffer,
-		length: d.byteLength,
-		slice: (...args) => new Buffer(d.buffer.slice(...args))
-	});
-}
+const dims = (idxs, header, ext) => {
 
-const dims = (idxs, siz) => {
-
-	const min = Math.min, max = Math.max, floor = Math.floor;
+	const min = Math.min, max = Math.max, floor = Math.floor, round = Math.round, siz = header.siz;
 
 	return idxs.map(idx => {
 
@@ -270,16 +339,24 @@ const dims = (idxs, siz) => {
 			tx0 = max(siz.XTOsiz + px * siz.XTsiz, siz.XOsiz),
 			tx1 = min(siz.XTOsiz + (px + 1) * siz.XTsiz, siz.Xsiz),
 			ty0 = max(siz.YTOsiz + py * siz.YTsiz, siz.YOsiz),
-			ty1 = min(siz.YTOsiz + (py + 1) * siz.YTsiz, siz.Ysiz);
+			ty1 = min(siz.YTOsiz + (py + 1) * siz.YTsiz, siz.Ysiz),
+			tw = tx1 - tx0,
+			th = ty1 - ty0,
+			off = idx === 0 ? header.sot : 0,
+			len = idx === 0 ? header.len : 0,
+			x0 = ext[0],
+			x1 = ext[2],
+			y0 = ext[1],
+			y1 = ext[3],
+			rx = round((x1 - x0) / siz.Xsiz),
+			ry = round((y1 - y0) / siz.Ysiz);
 
-		return {
-			idx,
-			off: 0,
-			len: 0,
-			tw: tx1 - tx0,
-			th: ty1 - ty0,
-			tx0,
-			ty0
+		return { idx, off, len, tw, th, tx0, ty0, ext: [
+				x0 + tx0 * rx,
+				y1 - ty0 * ry - th * ry,
+				x0 + tx0 * rx + tw * rx,
+				y1 - ty0 * ry
+			]
 		};
 
 	});
@@ -297,6 +374,22 @@ function Cache () {
 
 }
 
+const getExtent = (boxs) => {
+	// UTM
+	let toN = s => s.split(/\s+/).map(s => parseFloat(s));
+	let box = boxs.find((b, i, a) => i > 0 && a[i-1].data === 'gml.root-instance' && b.name === 'xml');
+	let pix = box.data.match(/\d[\d\s]+?\d(?=<\/gml:high>)/g).map(toN);
+	let ori = box.data.match(/\d[\d\s]+?\d(?=<\/gml:pos>)/g).map(toN);
+	let off = box.data.match(/-?\d[-?\d\s]+?\d(?=<\/gml:offsetVector>)/g).map(toN);
+
+	return [
+		ori[0][0] - 0.5 * off[0][0],
+		ori[0][1] + pix[0][1] * off[1][1]  - 0.5 * off[1][1],
+		ori[0][0] + pix[0][0] * off[0][0]  - 0.5 * off[0][0],
+		ori[0][1] - 0.5 * off[1][1],
+	];
+}
+
 const cache = new Cache();
 
 async function getHeader(url) {
@@ -309,153 +402,115 @@ async function getHeader(url) {
 
 	try {
 		let head = await checkHead(url);
-		if (head.type !== 'image/jp2')
-			return Promise.reject(new Error('url not a jp2 image'));
 		imgLength = head.length;
 	} catch (err) {
 		return Promise.reject(err);
 	}
 
-	const getBox = (pos, buffer) => {
+	const getSiz = (pos, buffer) => {
 
-			let xlen = 0,
-				len = buffer.ui32(pos),
-				box = boxes[buffer.ui32(pos + 4).toString(16)];
+		let	Xsiz = buffer.ui32(pos + 6),
+			Ysiz = buffer.ui32(pos + 10),
+			XOsiz = buffer.ui32(pos + 14),
+			YOsiz = buffer.ui32(pos + 18),
+			XTsiz = buffer.ui32(pos + 22),
+			YTsiz = buffer.ui32(pos + 26),
+			XTOsiz = buffer.ui32(pos + 30),
+			YTOsiz = buffer.ui32(pos + 34);
 
-			if (len === 1) {
-				xlen = buffer.ui32(pos + 8) * 4294967296 + buffer.ui32(pos + 12);
-			} else if (len === 0) {
-				len = 0; /* TODO: till end of file */
-			}
-
-			return {
-				name: box.name,
-				sbox: box.sbox,
-				len,
-				xlen
-			};
-
-		},
-		getSiz = (pos, buffer) => {
-
-			let	Xsiz = buffer.ui32(pos + 6),
-				Ysiz = buffer.ui32(pos + 10),
-				XOsiz = buffer.ui32(pos + 14),
-				YOsiz = buffer.ui32(pos + 18),
-				XTsiz = buffer.ui32(pos + 22),
-				YTsiz = buffer.ui32(pos + 26),
-				XTOsiz = buffer.ui32(pos + 30),
-				YTOsiz = buffer.ui32(pos + 34);
-
-			return {
-				Xsiz,
-				Ysiz,
-				XOsiz,
-				YOsiz,
-				XTsiz,
-				YTsiz,
-				XTOsiz,
-				YTOsiz,
-				Csiz: buffer.ui16(pos + 38),
-				Ssiz: (buffer.ui8(pos + 40) & 127) + 1,
-				nXTiles: Math.ceil((Xsiz - XTOsiz) / XTsiz),
-				nYTiles: Math.ceil((Ysiz - YTOsiz) / YTsiz)
-			};
-
-		},
-		getCodestreamHeader = async (pos, buffer, header) => {
-
-			let marker = markers[buffer.ui16(pos).toString(16)],
-				size = marker.delimiting ? 0 : buffer.ui16(pos + 2);
-
-			if (marker.name === 'SIZ') {
-				header.siz = getSiz(pos, buffer);
-				header.push({
-					name: marker.name,
-					buf: buffer.slice(pos, pos + size + 2)
-				});
-			} else if (marker.name === 'SOT') {
-				return { pos, size: buffer.ui32(pos + 6), header };
-			} else {
-				header.push({
-					name: marker.name,
-					buf: buffer.slice(pos, pos + size + 2)
-				});
-			}
-
-			if (pos + size >= buffer.length - EXTRA_BYTES) {
-				try {
-					let srt = buffer.length,
-						end = srt + Math.max(1023, pos + size - srt + EXTRA_BYTES);
-						if (end > imgLength) return Promise.reject(new Error('reached end of file'));
-					let buf = await fetchBytes(url, srt, end);
-					buffer = new Buffer(concat([buffer, buf]));
-				} catch (err) {
-					return Promise.reject(err);
-				}
-			}
-
-			try {
-				return await getCodestreamHeader(pos + 2 /* marker size */ + size, buffer, header);
-			} catch (err) {
-				return Promise.reject(err);
-			}
-
+		return {
+			Xsiz,
+			Ysiz,
+			XOsiz,
+			YOsiz,
+			XTsiz,
+			YTsiz,
+			XTOsiz,
+			YTOsiz,
+			Csiz: buffer.ui16(pos + 38),
+			Ssiz: (buffer.ui8(pos + 40) & 127) + 1,
+			nXTiles: Math.ceil((Xsiz - XTOsiz) / XTsiz),
+			nYTiles: Math.ceil((Ysiz - YTOsiz) / YTsiz)
 		};
 
-	const parse = async (pos, buffer) => {
+	},
+	getCodestreamHeader = async (pos, buffer, header = []) => {
 
-		if (pos >= buffer.length - EXTRA_BYTES) {
+		let marker = markers[buffer.ui16(pos).toString(16)],
+			size = marker.delimiting ? 0 : buffer.ui16(pos + 2);
+
+		if (marker.name === 'SIZ') {
+			header.siz = getSiz(pos, buffer);
+			header.push({
+				name: marker.name,
+				buf: buffer.slice(pos, pos + size + 2)
+			});
+		} else if (marker.name === 'SOT') {
+			header.sot = pos;
+			header.len = buffer.ui32(pos + 6);
+			return header;
+		} else {
+			header.push({
+				name: marker.name,
+				buf: buffer.slice(pos, pos + size + 2)
+			});
+		}
+
+		if (pos + size >= buffer.length - EXTRA_BYTES) {
 			try {
 				let srt = buffer.length,
-					end = srt + Math.max(1023, pos - srt + EXTRA_BYTES);
-					if (end > imgLength) return Promise.reject(new Error('reached end of file'));
-					let buf = await fetchBytes(url, srt, end);
+					end = srt + Math.max(1023, pos + size - srt + EXTRA_BYTES);
+					if (end > imgLength) throw new Error('reached end of file');
+				let buf = await fetchBytes(url, srt, end);
 				buffer = new Buffer(concat([buffer, buf]));
 			} catch (err) {
 				return Promise.reject(err);
 			}
 		}
 
-		let box = getBox(pos, buffer);
-
-		if (box.name === 'contiguousCodestream') {
-			try {
-				let ret = await getCodestreamHeader(pos + 8 + (box.xlen ? 8 : 0), buffer, []);
-				let noTiles = ret.header.siz.nXTiles * ret.header.siz.nYTiles;
-				let tiles = dims(Array.from(Array(noTiles).keys()), ret.header.siz);
-				tiles[0].off = ret.pos;
-				tiles[0].len = ret.size;
-				return {
-					buf: concat(ret.header.map(h => h.buf)),
-					siz: ret.header.siz,
-					posSOT: ret.pos,
-					imgLength,
-					url,
-					tiles
-				};
-			} catch (err) {
-				return Promise.reject(err);
-			}
-		} else if (box.len) { // stop if box.len = 0
-			pos = box.sbox ?
-				(pos + 8 + (box.xlen ? 8 : 0)) :
-				(pos + (box.xlen ? box.xlen : box.len));
-			try {
-				return await parse(pos, buffer);
-			} catch (err) {
-				return Promise.reject(err);
-			}
-		} else {
-			return Promise.reject(new Error('no codestream found'));
+		try {
+			return await getCodestreamHeader(pos + 2 /* marker size */ + size, buffer, header);
+		} catch (err) {
+			return Promise.reject(err);
 		}
 
 	};
 
-	header = await parse(0, new Buffer([]));
-	cache.add(header);
 
-	return header;
+	try {
+
+		let boxs = await getBoxes(url);
+		let jp2c = boxs[boxs.length - 1];
+		if (jp2c.name === 'jp2c') {
+			let ext = getExtent(boxs);
+			let off = jp2c.off + 8 + (jp2c.xlen ? 8 : 0);
+			let head = await getCodestreamHeader(off, jp2c.buf);
+			let tiles = dims(Array.from(Array(head.siz.nXTiles * head.siz.nYTiles).keys()), head, ext);
+			let header = {
+				buf: concat(head.map(h => h.buf)),
+				cmp: head.siz.Csiz,
+				bit: head.siz.Ssiz,
+				w: head.siz.Xsiz,
+				h: head.siz.Ysiz,
+				ext,
+				res: [
+					Math.round((ext[2] - ext[0]) / head.siz.Xsiz),
+					Math.round((ext[3] - ext[1]) / head.siz.Ysiz)
+				],
+				len: imgLength,
+				url,
+				tiles
+			};
+			cache.add(header);
+			return header;
+
+		} else {
+			throw new Error('Codestream not found');
+		}
+
+	} catch (err) {
+		return Promise.reject(err);
+	}
 
 }
 

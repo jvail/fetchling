@@ -6,7 +6,7 @@ JS (still experimental) library to extract single tiles from a remote jpeg2000 s
 
 * async/await
 * WebAssembly
-* Browser (no node.js build available)
+* Generators
 
 ## Examples
 

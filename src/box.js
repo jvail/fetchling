@@ -1,90 +1,160 @@
-export default Object.freeze({
-	'6a502020': {
-		name: 'signature',
+import fetchBytes from './fetchbytes.js'
+import Buffer from './buffer.js'
+import concat from './concat.js'
+
+const boxes = Object.freeze({
+	0x6a502020: {
+		name: 'jP',
 		sbox: false
 	},
-	'66747970': {
-		name: 'fileType',
+	0x66747970: {
+		name: 'ftyp',
 		sbox: false
 	},
-	'6a703268': {
-		name: 'jp2Header',
+	0x6a703268: {
+		name: 'jp2h',
 		sbox: true
 	},
-	'69686472': {
-		name: 'imageHeader',
+	0x69686472: {
+		name: 'ihdr',
 		sbox: false
 	},
-	'62706363': {
-		name: 'bitsPerComponent',
+	0x62706363: {
+		name: 'bpcc',
 		sbox: false
 	},
-	'6a703269': {
-		name: 'intellectualProperty',
+	0x6a703269: {
+		name: 'jp2i',
 		sbox: false
 	},
-	'786d6c20': {
+	0x786d6c20: {
 		name: 'xml',
 		sbox: false
 	},
-	'75756964': {
+	0x75756964: {
 		name: 'uuid',
 		sbox: false
 	},
-	'75696e66': {
-		name: 'uuidInfo',
+	0x75696e66: {
+		name: 'uinf',
 		sbox: true
 	},
-	'636f6c72': {
-		name: 'colourSpecification',
+	0x636f6c72: {
+		name: 'colr',
 		sbox: false
 	},
-	'70636c72': {
-		name: 'palette',
+	0x70636c72: {
+		name: 'pclr',
 		sbox: false
 	},
-	'636d6170': {
-		name: 'componentMapping',
+	0x636d6170: {
+		name: 'cmap',
 		sbox: false
 	},
-	'63646566': {
-		name: 'channelDefinition',
+	0x63646566: {
+		name: 'cdef',
 		sbox: false
 	},
-	'72657320': {
-		name: 'resolution',
+	0x72657320: {
+		name: 'res',
 		sbox: true
 	},
-	'6a703263': {
-		name: 'contiguousCodestream',
+	0x6a703263: {
+		name: 'jp2c',
 		sbox: false
 	},
-	'6a706368': {
-		name: 'codestreamHeader',
+	0x6a706368: {
+		name: 'jpch',
 		sbox: true
 	},
-	'72657363': {
-		name: 'captureResolution',
+	0x72657363: {
+		name: 'resc',
 		sbox: false
 	},
-	'72657364': {
-		name: 'displayResolution',
+	0x72657364: {
+		name: 'resd',
 		sbox: false
 	},
-	'756c7374': {
-		name: 'uuidList',
+	0x756c7374: {
+		name: 'ulst',
 		sbox: false
 	},
-	'75726c20': {
+	0x75726c20: {
 		name: 'url',
 		sbox: false
 	},
-	'61736f63': {
-		name: 'association',
+	0x61736f63: {
+		name: 'asoc',
 		sbox: true
 	},
-	'6c626c20': {
-		name: 'label',
+	0x6c626c20: {
+		name: 'lbl',
 		sbox: false
 	}
 });
+
+async function* getBox(url, buf) {
+
+	let off = 0;
+
+	while (1) {
+
+		let box = boxes[buf.ui32(off + 4)],
+			off_ = off,
+			len = buf.ui32(off),
+			xlen = len === 1 ? buf.ui32(off + 8) * 4294967296 + buf.ui32(off + 12) : 0;
+
+		if (!box) {
+			throw new Error('no jp2 box found');
+		}
+
+		off = box.sbox ? (off + 8 + (xlen ? 8 : 0)) : (off + len);
+		if (off + 16 < buf.len && box.name !== 'jp2c') {
+			let byt = await fetchBytes(url, buf.len, buf.len + Math.max(1024, off + 16));
+			buf = new Buffer(concat([buf, byt]));
+		}
+		yield {
+			name: box.name,
+			sbox: box.sbox,
+			len: xlen ? xlen : len,
+			xlen,
+			off: off_,
+			buf
+		};
+		if (box.name === 'jp2c') return;
+	}
+
+};
+
+export default async function (url) {
+
+	try {
+
+		let boxs = [];
+		let byt = await fetchBytes(url, 0, 2048);
+		let buf = new Buffer(byt);
+		let txt = new TextDecoder();
+
+		if (buf.ui32(4) === 0x6a502020) {
+			for await (const box of getBox(url, buf)) {
+				buf = box.buf;
+				switch (box.name) {
+					case 'lbl':
+						box.data = txt.decode(buf.data.slice(box.off + 8, box.off + box.len));
+					case 'xml':
+						box.data = txt.decode(buf.data.slice(box.off + 8, box.off + box.len));
+					break;
+				}
+				boxs.push(box);
+			}
+		} else {
+			throw new Error('not a j2k file');
+		}
+
+		return boxs;
+
+	} catch (err) {
+		Promise.reject(err);
+	}
+
+};

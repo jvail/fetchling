@@ -20,6 +20,8 @@ export default function Buffer(data) {
 		array: d,
 		arrayBuffer: d.buffer,
 		length: d.byteLength,
+		len: d.byteLength,
+		data: d.buffer,
 		slice: (...args) => new Buffer(d.buffer.slice(...args))
 	});
 }
