@@ -109,7 +109,7 @@ async function* getBox(url, buf) {
 		}
 
 		off = box.sbox ? (off + 8 + (xlen ? 8 : 0)) : (off + len);
-		if (off + 16 < buf.len && box.name !== 'jp2c') {
+		if (off + 16 >= buf.len && box.name !== 'jp2c') {
 			let byt = await fetchBytes(url, buf.len, buf.len + Math.max(1024, off + 16));
 			buf = new Buffer(concat([buf, byt]));
 		}
