@@ -14,8 +14,6 @@ JS (still experimental) library to extract single tiles from a remote jpeg2000 s
 
 According to [this comment](https://forum.sentinel-hub.com/t/changes-of-the-access-rights-to-l1c-bucket-at-aws-public-datasets-requester-pays/172) the examples wont work anymore after June 2018.
 
-* https://jvail.github.io/fetchling/examples
-
 ## Dependencies
 
 * J2K decoder (https://github.com/jvail/j2k.js)
