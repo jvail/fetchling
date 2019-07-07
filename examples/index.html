@@ -2,8 +2,8 @@
 <html>
 	<head>
 		<title>Extract single tiles from a large jpeg2000 Sentinel image</title>
-		<link rel='stylesheet' href='https://openlayers.org/en/v4.6.4/css/ol.css' type='text/css'>
-		<script src='https://openlayers.org/en/v4.6.4/build/ol.js'></script>
+		<link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/openlayers/4.6.5/ol.css' type='text/css'>
+		<script src='https://cdnjs.cloudflare.com/ajax/libs/openlayers/4.6.5/ol.js'></script>
 		<script src='https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.4.4/proj4.js'></script>
 		<script type='text/javascript' src='js/fetchling.js'></script>
 		<script type='text/javascript' src='js/tinycolor.js'></script>
@@ -54,20 +54,16 @@
 			</div>
 			<div>
 				<select id='image'>
-					<option value='B01.jp2'>Band 1</option>
-					<option value='B02.jp2'>Band 2</option>
-					<option value='B03.jp2'>Band 3</option>
-					<option value='B04.jp2'>Band 4</option>
-					<option value='B05.jp2'>Band 5</option>
-					<option value='B06.jp2'>Band 6</option>
-					<option value='B07.jp2'>Band 7</option>
-					<option value='B08.jp2'>Band 8</option>
-					<option value='B8A.jp2'>Band 8A</option>
-					<option value='B09.jp2'>Band 9</option>
-					<option value='B10.jp2'>Band 10</option>
-					<option value='B11.jp2'>Band 11</option>
-					<option value='B12.jp2'>Band 12</option>
-					<option value='TCI.jp2'>True Color</option>
+					<option value='B02'>Band 2</option>
+					<option value='B03'>Band 3</option>
+					<option value='B04'>Band 4</option>
+					<option value='B05'>Band 5</option>
+					<option value='B06'>Band 6</option>
+					<option value='B07'>Band 7</option>
+					<option value='B8A'>Band 8A</option>
+					<option value='B11'>Band 11</option>
+					<option value='B12'>Band 12</option>
+					<option value='TCI'>True Color</option>
 				</select>
 			</div>
 			<div>
@@ -91,8 +87,8 @@
 		let gridLayer;
 		let imgLayers = [];
 		let pro = document.getElementById('progress');
-		let path = 'https://sentinel-s2-l1c.s3.amazonaws.com/tiles/32/U/MA/2017/4/30/0/';
-		let url = 'https://sentinel-s2-l1c.s3.amazonaws.com/tiles/32/U/MA/2017/4/30/0/B01.jp2';
+		let path = '../io/data/sentinel/T32UMA_20190629T103031/T32UMA_20190629T103031_';
+		let url = `${path}B02_20m.jp2`;
 		let gradient = tinygradient('red', 'orange', 'green', 'blue');
 		let colors = gradient.rgb(50);
 
@@ -135,7 +131,7 @@
 
 		document.getElementById('image').onchange = (evt) => {
 			imgLayers.forEach(l => map.removeLayer(l));
-			url = path + evt.target.value;
+			url = `${path}${evt.target.value}_20m.jp2`;
 			makeGrid();
 		}
 
