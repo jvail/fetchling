@@ -54,16 +54,10 @@
 			</div>
 			<div>
 				<select id='image'>
+					<option value='TCI'>True Color</option>
 					<option value='B02'>Band 2</option>
 					<option value='B03'>Band 3</option>
 					<option value='B04'>Band 4</option>
-					<option value='B05'>Band 5</option>
-					<option value='B06'>Band 6</option>
-					<option value='B07'>Band 7</option>
-					<option value='B8A'>Band 8A</option>
-					<option value='B11'>Band 11</option>
-					<option value='B12'>Band 12</option>
-					<option value='TCI'>True Color</option>
 				</select>
 			</div>
 			<div>
@@ -87,8 +81,8 @@
 		let gridLayer;
 		let imgLayers = [];
 		let pro = document.getElementById('progress');
-		let path = '../io/data/sentinel/T32UMA_20190629T103031/T32UMA_20190629T103031_';
-		let url = `${path}B02_20m.jp2`;
+		let path = 'jp2/T32UMA_20190629T103031_';
+		let url = `${path}TCI_20m.jp2`;
 		let gradient = tinygradient('red', 'orange', 'green', 'blue');
 		let colors = gradient.rgb(50);
 
@@ -136,6 +130,11 @@
 		}
 
 		async function makeGrid() {
+
+			let div = document.createElement('div');
+			div.id = 'pro-grid';
+			div.appendChild(document.createTextNode('fetching image header ...'));
+			pro.appendChild(div);
 
 			try {
 				let header = await fetchling.header(url);
@@ -192,8 +191,11 @@
 				nodes[3].innerHTML = 'Height: ' + (header.h) + 'px';
 				nodes[4].innerHTML = 'URL: ' + url;
 
+				pro.removeChild(document.getElementById('pro-grid'))
+
 			} catch (err) {
 				console.log(err);
+				pro.removeChild(document.getElementById('pro-grid'))
 			}
 
 		}
