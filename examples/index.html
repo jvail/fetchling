@@ -131,6 +131,11 @@
 
 		async function makeGrid() {
 
+			let div = document.createElement('div');
+			div.id = 'pro-grid';
+			div.appendChild(document.createTextNode('fetching image header ...'));
+			pro.appendChild(div);
+
 			try {
 				let header = await fetchling.header(url);
 				let ox = header.ext[0], oy = header.ext[3];
@@ -186,8 +191,11 @@
 				nodes[3].innerHTML = 'Height: ' + (header.h) + 'px';
 				nodes[4].innerHTML = 'URL: ' + url;
 
+				pro.removeChild(document.getElementById('pro-grid'))
+
 			} catch (err) {
 				console.log(err);
+				pro.removeChild(document.getElementById('pro-grid'))
 			}
 
 		}
