@@ -4,7 +4,10 @@
   "description": "Fetch portions (jp2 tiles) from a large remote sensing jpeg2000 image",
   "main": "dist/fetchling.js",
   "scripts": {
-    "build": "rollup -c"
+    "build": "rollup -c",
+    "serve:example": "npm run build && cp ./dist/fetchling.js ./examples/js/fetchling.js && npx serve ./examples",
+    "serve:test": "npx serve ./tests/data",
+    "test": "node --experimental-modules ./tests/fetch.mjs"
   },
   "repository": {
     "type": "git",
@@ -21,8 +24,9 @@
   },
   "homepage": "https://github.com/jvail/fetchling#readme",
   "devDependencies": {
-    "acorn-async-iteration": "^0.2.1",
-    "rollup": "^0.55.1",
-    "rollup-plugin-node-resolve": "^3.0.2"
+    "node-fetch": "^2.6.0",
+    "rollup": "^1.16.7",
+    "serve": "^11.1.0",
+    "terser": "^4.1.2"
   }
 }

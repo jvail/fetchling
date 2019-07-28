@@ -1,7 +1,7 @@
 import getBoxes from './box.js'
 import markers from './marker.js'
 import concat from './concat.js'
-import checkHead from './checkhead.js'
+import getLength from './getlength.js'
 import Buffer from './buffer.js'
 import dims from './tiledims.js'
 import Cache from './cache.js'
@@ -19,7 +19,7 @@ export default async function getHeader(url) {
 	if (header = cache.get(url)) return header;
 
 	try {
-		imgLen = await checkHead(url);
+		imgLen = await getLength(url);
 	} catch (err) {
 		return Promise.reject(err);
 	}

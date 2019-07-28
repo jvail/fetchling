@@ -10,13 +10,14 @@ export default async function getTiles(header, idxs_) {
 	const url = header.url,
 		imgLen = header.imgLen,
 		head = header.buf,
+		BYTES = 10,
 		idxs = idxs_.slice().sort();
 
 	async function get(pos, tiles) {
 
 		try {
 
-			let bytes = await fetchBytes(url, pos, pos + 9);
+			let bytes = await fetchBytes(url, pos, pos + BYTES - 1);
 			let buffer = new Buffer(bytes);
 
 			if (buffer.ui16(0) === 0xff90 /* SOT */) {

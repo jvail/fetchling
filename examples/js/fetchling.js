@@ -1,6 +1,3 @@
-const fetchling = (function (exports) {
-'use strict';
-
 const fetchBytes = async (url, srt, end) => {
 	try {
 		let res = await fetch(url, {
@@ -12,10 +9,10 @@ const fetchBytes = async (url, srt, end) => {
 			});
 		if (res.status === 206 /* partial */) return res.arrayBuffer();
 		if (res.status === 416 /* exceeds length */) return new ArrayBuffer(0);
-		Promise.reject(new Error(`Request failed (${res.status})`));
+		return Promise.reject(new Error(`Request failed (${res.status})`));
 	} catch (err) {
 		if (res.status === 416) return new ArrayBuffer(0);
-		Promise.reject(err);
+		return Promise.reject(err);
 	}
 };
 
@@ -66,7 +63,7 @@ const concat = (bufs) => {
 		c.set(b, alen);
 		return c;
 	}, new Uint8Array()).buffer;
-}
+};
 
 const boxes = Object.freeze({
 	0x6a502020: {
@@ -191,7 +188,6 @@ async function* getBox(url, buf) {
 	}
 
 }
-
 async function getBoxes (url) {
 
 	try {
@@ -199,7 +195,6 @@ async function getBoxes (url) {
 		let boxs = [];
 		let byt = await fetchBytes(url, 0, 2048);
 		let buf = new Buffer(byt);
-		let txt = new TextDecoder();
 
 		if (buf.ui32(4) === 0x6a502020) {
 			for await (const box of getBox(url, buf)) {
@@ -207,7 +202,7 @@ async function getBoxes (url) {
 				switch (box.name) {
 					case 'lbl':
 					case 'xml':
-						box.data = txt.decode(buf.data.slice(box.off + 8, box.off + box.len));
+						box.data = String.fromCharCode.apply(null, new Uint8Array(buf.data.slice(box.off + 8, box.off + box.len)));
 					break;
 				}
 				boxs.push(box);
@@ -219,7 +214,7 @@ async function getBoxes (url) {
 		return boxs;
 
 	} catch (err) {
-		Promise.reject(err);
+		return Promise.reject(err);
 	}
 
 }
@@ -311,13 +306,18 @@ const markers = Object.freeze({
 	}
 });
 
-const checkHead = async (url) => {
+const getLength = async (url) => {
 	try {
-		return (await fetch(url, {
+		const len = +(await fetch(url, {
 			method: 'HEAD',
 			mode: 'cors',
 			cache: 'no-store'
-		})).headers.get('Content-Length') || Infinity;
+		})).headers.get('Content-Length');
+		if (Number.isFinite(len)) {
+			return len;
+		} else {
+			throw Error(`HEAD request to "${url}" did report content length of image.`);
+		}
 	} catch (err) {
 		return Promise.reject(err);
 	}
@@ -356,7 +356,7 @@ const dims = (idxs, header, ext) => {
 
 	});
 
-}
+};
 
 function Cache () {
 
@@ -371,19 +371,19 @@ function Cache () {
 
 const getExtent = (boxs) => {
 	// UTM
-	let toN = s => s.split(/\s+/).map(s => parseFloat(s));
-	let box = boxs.find((b, i, a) => i > 0 && a[i-1].data === 'gml.root-instance' && b.name === 'xml');
-	let pix = box.data.match(/\d[\d\s]+?\d(?=<\/gml:high>)/g).map(toN);
-	let ori = box.data.match(/\d[\d\s]+?\d(?=<\/gml:pos>)/g).map(toN);
-	let off = box.data.match(/-?\d[-?\d\s]+?\d(?=<\/gml:offsetVector>)/g).map(toN);
+	const toNumber = s => s.split(/\s+/).map(s => parseFloat(s));
+	const box = boxs.find((box, i, boxs) => i > 0 && boxs[i-1].data === 'gml.root-instance' && box.name === 'xml');
+	const pix = box.data.match(/\d[\d\s]+?\d(?=<\/gml:high>)/g).map(toNumber);
+	const ori = box.data.match(/\d[\d\s]+?\d(?=<\/gml:pos>)/g).map(toNumber);
+	const off = box.data.match(/-?\d[-?\d\s]+?\d(?=<\/gml:offsetVector>)/g).map(toNumber);
 
 	return [
 		ori[0][0] - 0.5 * off[0][0],
-		ori[0][1] + pix[0][1] * off[1][1]  - 0.5 * off[1][1],
-		ori[0][0] + pix[0][0] * off[0][0]  - 0.5 * off[0][0],
+		ori[0][1] + pix[0][1] * off[1][1] - 0.5 * off[1][1],
+		ori[0][0] + pix[0][0] * off[0][0] - 0.5 * off[0][0],
 		ori[0][1] - 0.5 * off[1][1],
 	];
-}
+};
 
 const cache = new Cache();
 
@@ -396,7 +396,7 @@ async function getHeader(url) {
 	if (header = cache.get(url)) return header;
 
 	try {
-		imgLen = await checkHead(url);
+		imgLen = await getLength(url);
 	} catch (err) {
 		return Promise.reject(err);
 	}
@@ -553,7 +553,7 @@ async function find (header, idx) {
 			}
 			return { pos: -1, idx: -1 };
 		} catch (err) {
-			Promise.reject(err);
+			return Promise.reject(err);
 		}
 
 	}
@@ -561,7 +561,7 @@ async function find (header, idx) {
 	async function seek(ahead, back) {
 
 		try {
-
+			// TODO: search multiple times ahead and back if index found is too (criteria?) far away
 			let sot, sots = await Promise.all([_(ahead), _(back)]);
 			if (sot = sots.find(s => s.pos > 0 && s.idx <= idx)) {
 				return sot.pos;
@@ -570,7 +570,7 @@ async function find (header, idx) {
 			}
 
 		} catch (err) {
-			Promise.reject(err);
+			return Promise.reject(err);
 		}
 
 	}
@@ -590,14 +590,14 @@ async function find (header, idx) {
 		if (idx_ - pre > tiles.length / 8) {
 			let stat = tiles.reduce((o, t)=> {
 				o.s += t.len;
-				o.c += t.len ? 1 : 0;
+				o.c += !!t.len;
 				return o;
 			}, { s: 0, c: 0 } );
 			let avg = stat.s / stat.c;
 			try {
 				return await seek(Math.round(avg * (idx_ - 0.5)) /*ahead*/, Math.round(avg * (idx_ - 0.5)) - BYTES);
 			} catch (err) {
-				Promise.reject(err);
+				return Promise.reject(err);
 			}
 		} else {
 			return tiles[pre].off;
@@ -614,13 +614,14 @@ async function getTiles(header, idxs_) {
 	const url = header.url,
 		imgLen = header.imgLen,
 		head = header.buf,
+		BYTES = 10,
 		idxs = idxs_.slice().sort();
 
 	async function get(pos, tiles) {
 
 		try {
 
-			let bytes = await fetchBytes(url, pos, pos + 9);
+			let bytes = await fetchBytes(url, pos, pos + BYTES - 1);
 			let buffer = new Buffer(bytes);
 
 			if (buffer.ui16(0) === 0xff90 /* SOT */) {
@@ -654,7 +655,6 @@ async function getTiles(header, idxs_) {
 		}
 
 	}
-
 	try {
 		let pos = await find(header, idxs[0]);
 		return get(pos, []);
@@ -664,45 +664,47 @@ async function getTiles(header, idxs_) {
 
 }
 
-const getPath = (name) => document ? `${document.currentScript.src.split('/').slice(0, -1).join('/')}/${name}` : name;
+const getPath = (name, src) => src ? `${src.split('/').slice(0, -1).join('/')}/${name}` : name;
 
-const j2k = (function () {
-	const queue = [];
-	const worker = new Worker(getPath('j2k-worker.js'));
-	let initialized = new Promise ((resolve, reject) => {
-		queue.push({ resolve, reject });
-	});
-	worker.onmessage = (evt) => {
-		if (!initialized && evt.data.initialized) {
-			queue.shift().resolve(initialized = true);
-		} else {
-			if (evt.data) {
-				queue.shift().resolve({
-					idx: evt.data.idx,
-					i16: new Int16Array(evt.data.buf)
-				});
-			} else {
-				queue.shift().reject(evt.data);
-			}
-		}
-	};
-	return async function (data) {
-		if (initialized !== true) await initialized;
-		return new Promise((resolve, reject) => {
-			if (!(data.buf instanceof ArrayBuffer)) {
-				reject('Input not a buffer');
-			} else {
-				queue.push({ resolve, reject });
-				worker.postMessage(data, [data.buf]);
-			}
+const decode = (function () {
+	if (typeof Worker !== 'undefined') {
+		const src = (typeof document !== 'undefined' && document.currentScript) ? document.currentScript.src : import.meta.url;
+		const queue = [];
+		const worker = new Worker(getPath('j2k-worker.js', src));
+		let initialized = new Promise ((resolve, reject) => {
+			queue.push({ resolve, reject });
 		});
-	};
+		worker.onmessage = (evt) => {
+			if (!initialized && evt.data.initialized) {
+				queue.shift().resolve(initialized = true);
+			} else {
+				if (evt.data) {
+					queue.shift().resolve({
+						idx: evt.data.idx,
+						i16: new Int16Array(evt.data.buf)
+					});
+				} else {
+					queue.shift().reject(evt.data);
+				}
+			}
+		};
+		return async function (data) {
+			if (initialized !== true) await initialized;
+			return new Promise((resolve, reject) => {
+				if (!(data.buf instanceof ArrayBuffer)) {
+					reject('Input not a buffer');
+				} else {
+					queue.push({ resolve, reject });
+					worker.postMessage(data, [data.buf]);
+				}
+			});
+		};
+	}
+
+	return null;
+
 }());
 
-exports.header = getHeader;
-exports.tiles = getTiles;
-exports.decode = j2k;
+const fetchling = { header: getHeader, tiles: getTiles, decode };
 
-return exports;
-
-}({}));
+export { fetchling };

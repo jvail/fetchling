@@ -46,7 +46,7 @@ export default async function (header, idx) {
 			}
 			return { pos: -1, idx: -1 };
 		} catch (err) {
-			Promise.reject(err);
+			return Promise.reject(err);
 		}
 
 	}
@@ -54,7 +54,7 @@ export default async function (header, idx) {
 	async function seek(ahead, back) {
 
 		try {
-
+			// TODO: search multiple times ahead and back if index found is too (criteria?) far away
 			let sot, sots = await Promise.all([_(ahead), _(back)]);
 			if (sot = sots.find(s => s.pos > 0 && s.idx <= idx)) {
 				return sot.pos;
@@ -63,7 +63,7 @@ export default async function (header, idx) {
 			}
 
 		} catch (err) {
-			Promise.reject(err);
+			return Promise.reject(err);
 		}
 
 	}
@@ -83,14 +83,14 @@ export default async function (header, idx) {
 		if (idx_ - pre > tiles.length / 8) {
 			let stat = tiles.reduce((o, t)=> {
 				o.s += t.len;
-				o.c += t.len ? 1 : 0;
+				o.c += !!t.len;
 				return o;
 			}, { s: 0, c: 0 } );
 			let avg = stat.s / stat.c;
 			try {
 				return await seek(Math.round(avg * (idx_ - 0.5)) /*ahead*/, Math.round(avg * (idx_ - 0.5)) - BYTES);
 			} catch (err) {
-				Promise.reject(err);
+				return Promise.reject(err);
 			}
 		} else {
 			return tiles[pre].off;

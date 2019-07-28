@@ -133,7 +133,6 @@ export default async function (url) {
 		let boxs = [];
 		let byt = await fetchBytes(url, 0, 2048);
 		let buf = new Buffer(byt);
-		let txt = new TextDecoder();
 
 		if (buf.ui32(4) === 0x6a502020) {
 			for await (const box of getBox(url, buf)) {
@@ -141,7 +140,7 @@ export default async function (url) {
 				switch (box.name) {
 					case 'lbl':
 					case 'xml':
-						box.data = txt.decode(buf.data.slice(box.off + 8, box.off + box.len));
+						box.data = String.fromCharCode.apply(null, new Uint8Array(buf.data.slice(box.off + 8, box.off + box.len)));
 					break;
 				}
 				boxs.push(box);
@@ -153,7 +152,7 @@ export default async function (url) {
 		return boxs;
 
 	} catch (err) {
-		Promise.reject(err);
+		return Promise.reject(err);
 	}
 
 };
