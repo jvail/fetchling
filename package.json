@@ -24,7 +24,7 @@
   },
   "homepage": "https://github.com/jvail/fetchling#readme",
   "devDependencies": {
-    "node-fetch": "^2.6.0",
+    "node-fetch": "^2.6.1",
     "rollup": "^1.16.7",
     "serve": "^11.1.0",
     "terser": "^4.1.2"
